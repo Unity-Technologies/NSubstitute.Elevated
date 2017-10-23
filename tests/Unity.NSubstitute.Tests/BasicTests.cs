@@ -11,7 +11,29 @@ namespace Unity.NSubstitute.Tests
     class BasicTests
     {
         [Test]
-        public void Class_Default_Constructor_Should_Not_Run()
+        public void MockByInterface_ShouldUseNSubDefaultBehavior()
+        {
+            var sub = Substitute.For<IBasicInterface>();
+            sub.GetType().FullName.ShouldBe("Castle.Proxies.IBasicInterfaceProxy");
+
+            sub.GetValue().ShouldBe(0);
+            sub.GetValue().Returns(5);
+            sub.GetValue().ShouldBe(5);
+        }
+
+        [Test]
+        public void MockByVirtualClass_ShouldUseNSubDefaultBehavior()
+        {
+            var sub = Substitute.ForPartsOf<ClassWithVirtuals>();
+            sub.GetType().FullName.ShouldBe("Castle.Proxies.ClassWithVirtualsProxy");
+
+            sub.GetValue().ShouldBe(4);
+            sub.GetValue().Returns(6);
+            sub.GetValue().ShouldBe(6);
+        }
+
+        [Test]
+        public void ClassWithDefaultCtor_MockedMethod_ShouldNotRun()
         {
             var sub = Substitute.For<ClassWithDefaultCtor>();
             sub.ShouldBeOfType<ClassWithDefaultCtor>();
@@ -20,25 +42,30 @@ namespace Unity.NSubstitute.Tests
         }
 
         [Test]
-        public void Can_Mock_Class_With_No_Default_Ctor()
+        public void ClassWithNoDefaultCtor_MocksWithoutError()
         {
             Substitute.For<ClassWithNoDefaultCtor>().ShouldBeOfType<ClassWithNoDefaultCtor>();
         }
 
+#       if TEST_ICALLS
         [Test]
-        public void Can_Mock_Class_Containing_ICall_In_Ctor()
+        public void ClassWithICallInCtor_MocksWithoutError()
         {
+            // $ TODO: make this into an actual test of the icall thing. currently just checks that doesn't throw..not that interesting
+
             Substitute.For<ClassWithCtorICall>().ShouldBeOfType<ClassWithCtorICall>();
         }
 
+#       endif
+
         [Test]
-        public void Can_Mock_Class_Containing_Throw_In_Ctor()
+        public void ClassWithThrowInCtor_MocksWithoutError()
         {
             Substitute.For<ClassWithCtorThrow>().ShouldBeOfType<ClassWithCtorThrow>();
         }
 
         [Test]
-        public void Mocking_Class_With_Constructor_Params_Should_Throw()
+        public void ClassWithCtorParams_WhenMocked_ShouldThrow()
         {
             Should.Throw<SubstituteException>(() => Substitute.For<ClassWithNoDefaultCtor>(null));
             Should.Throw<SubstituteException>(() => Substitute.For<ClassWithNoDefaultCtor>("test"));
@@ -46,7 +73,7 @@ namespace Unity.NSubstitute.Tests
         }
 
         [Test]
-        public void Class_With_No_Methods_Should_Not_Be_Patched()
+        public void ClassWithNoMethods_ShouldBeIgnoredByWeaver()
         {
             // if it's a patched type, mocking will produce identical type (i.e. proxying installed directly in type).
             // if unpatched, then mocking will run standard nsubstitute behavior (i.e. proxying done via dynamicproxy generator, which inherits proxy type from the real type).
@@ -58,16 +85,18 @@ namespace Unity.NSubstitute.Tests
         }
 
         [Test]
-        public void Non_Mocked_Class_With_Dependent_Types_Should_Load_Ok()
+        public void NonMockedClassWithDependentTypes_LoadsWithoutError()
         {
+            // ReSharper disable once PossibleNullReferenceException
             typeof(ClassWithDependency).GetMethod("Dummy").ReturnType.FullName.ShouldBe("mycodedep.DependentType");
         }
 
         [Test]
-        public void Class_With_Dependent_Types_Should_Be_Patched()
+        public void ClassWithDependentTypes_MocksWithoutError()
         {
             // simple test to ensure that we can patch methods that use types from foreign assemblies
 
+            // ReSharper disable once PossibleNullReferenceException
             Substitute.For<ClassWithDependency>().GetType().GetMethod("Dummy").ReturnType.FullName.ShouldBe("mycodedep.DependentType");
         }
     }

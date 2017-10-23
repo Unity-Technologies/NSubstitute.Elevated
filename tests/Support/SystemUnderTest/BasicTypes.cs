@@ -7,6 +7,16 @@ using System.Runtime.CompilerServices;
 
 namespace SystemUnderTest
 {
+    public interface IBasicInterface
+    {
+        int GetValue();
+    }
+
+    public class ClassWithVirtuals
+    {
+        public virtual int GetValue() => 4;
+    }
+
     public class ClassWithDefaultCtor
     {
         public ClassWithDefaultCtor()
@@ -33,6 +43,7 @@ namespace SystemUnderTest
         public ClassWithNoDefaultCtorNoMethods(string i1, string i2) {}
     }
 
+#   if TEST_ICALLS
     public class ClassWithCtorICall
     {
         public ClassWithCtorICall()
@@ -43,6 +54,7 @@ namespace SystemUnderTest
         [MethodImpl((MethodImplOptions) 0x1000)]
         static extern void DoICall();
     }
+#   endif // TEST_ICALLS
 
     public class ClassWithCtorThrow
     {
