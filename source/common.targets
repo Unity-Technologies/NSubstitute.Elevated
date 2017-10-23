@@ -1,0 +1,5 @@
+<Project>
+  <PropertyGroup>
+    <DefaultItemExcludes>$(DefaultItemExcludes);**\*.bak</DefaultItemExcludes>
+  </PropertyGroup>
+</Project>
