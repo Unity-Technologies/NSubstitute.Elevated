@@ -1,0 +1,9 @@
+[version]
+repoconfig=4
+
+[format]
+path-ignore=<<EOT
+EOT
+
+[verify]
+path=^[a-z0-9./_-]+$
