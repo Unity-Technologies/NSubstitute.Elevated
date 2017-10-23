@@ -1,5 +1,8 @@
 using System;
+
+#if TEST_ICALLS
 using System.Runtime.CompilerServices;
+#endif
 
 // ReSharper disable MemberInitializerValueIgnored
 // ReSharper disable UnusedMember.Local
