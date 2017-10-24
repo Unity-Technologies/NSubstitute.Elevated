@@ -3,10 +3,13 @@ using System.Collections.Generic;
 using JetBrains.Annotations;
 using NSubstitute.Core;
 using NSubstitute.Core.Arguments;
+using NSubstitute.Elevated.Utilities;
+using NSubstitute.Exceptions;
 using NSubstitute.Routing;
 
 namespace NSubstitute.Elevated
 {
+    // this class exists solely to hook in our own proxy factory to the nsub machinery
     public class ElevatedSubstitutionContext : ISubstitutionContext
     {
         readonly ISubstitutionContext m_Forwarder;
@@ -15,8 +18,25 @@ namespace NSubstitute.Elevated
         public ElevatedSubstitutionContext([NotNull] ISubstitutionContext forwarder)
         {
             m_Forwarder = forwarder;
-            m_ElevatedSubstituteFactory = new ElevatedSubstituteFactory(forwarder.SubstituteFactory);
+            m_ElevatedSubstituteFactory = new SubstituteFactory(this,
+                    new CallRouterFactory(), new ElevatedProxyFactory(ElevatedProxyMapper), new CallRouterResolver());
         }
+
+        public static IDisposable AutoHook()
+        {
+            var hookedContext = SubstitutionContext.Current;
+            var thisContext = new ElevatedSubstitutionContext(hookedContext);
+            SubstitutionContext.Current = thisContext;
+
+            return new DelegateDisposable(() =>
+                {
+                    if (SubstitutionContext.Current != thisContext)
+                        throw new SubstituteException("Unexpected hook in place of ours");
+                    SubstitutionContext.Current = hookedContext;
+                });
+        }
+
+        internal ElevatedProxyMapper ElevatedProxyMapper { get; } = new ElevatedProxyMapper();
 
         // this is the only one we're overriding for now, so we can hook our own factory in there.
         ISubstituteFactory ISubstitutionContext.SubstituteFactory => m_ElevatedSubstituteFactory;

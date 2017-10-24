@@ -1,6 +1,5 @@
 using System;
 using SystemUnderTest;
-using NSubstitute;
 using NSubstitute.Exceptions;
 using NUnit.Framework;
 using Shouldly;
@@ -10,6 +9,20 @@ namespace NSubstitute.Elevated.Tests
     [TestFixture]
     class BasicTests
     {
+        IDisposable m_Dispose;
+
+        [OneTimeSetUp]
+        public void Setup()
+        {
+            m_Dispose = ElevatedSubstitutionContext.AutoHook();
+        }
+
+        [OneTimeTearDown]
+        public void TearDown()
+        {
+            m_Dispose.Dispose();
+        }
+
         [Test]
         public void MockByInterface_ShouldUseNSubDefaultBehavior()
         {
@@ -46,7 +59,7 @@ namespace NSubstitute.Elevated.Tests
         }
 
         [Test]
-        public void ClassWithNoDefaultCtor_MocksWithoutError()
+        public void ClassWithNoDefaultCtor_Mocks()
         {
             var sub = Substitute.For<ClassWithNoDefaultCtor>();
 
@@ -55,7 +68,7 @@ namespace NSubstitute.Elevated.Tests
 
 #       if TEST_ICALLS
         [Test]
-        public void ClassWithICallInCtor_MocksWithoutError()
+        public void ClassWithICallInCtor_Mocks()
         {
             // $ TODO: make this into an actual test of the icall thing. currently just checks that doesn't throw..not that interesting
 
@@ -67,7 +80,7 @@ namespace NSubstitute.Elevated.Tests
 #       endif
 
         [Test]
-        public void ClassWithThrowInCtor_MocksWithoutError()
+        public void ClassWithThrowInCtor_Mocks()
         {
             var sub = Substitute.For<ClassWithCtorThrow>();
 
@@ -102,14 +115,14 @@ namespace NSubstitute.Elevated.Tests
         }
 
         [Test]
-        public void NonMockedClassWithDependentTypes_LoadsWithoutError()
+        public void NonMockedClassWithDependentTypes_Loads()
         {
             // ReSharper disable once PossibleNullReferenceException
             typeof(ClassWithDependency).GetMethod("Dummy").ReturnType.FullName.ShouldBe("mycodedep.DependentType");
         }
 
         [Test]
-        public void ClassWithDependentTypes_MocksWithoutError()
+        public void ClassWithDependentTypes_Mocks()
         {
             // simple test to ensure that we can patch methods that use types from foreign assemblies
 
@@ -117,6 +130,38 @@ namespace NSubstitute.Elevated.Tests
 
             // ReSharper disable once PossibleNullReferenceException
             sub.GetType().GetMethod("Dummy").ReturnType.FullName.ShouldBe("mycodedep.DependentType");
+        }
+
+        [Test]
+        public void SimpleClass_FullMock_DoesNotCallDefaultImpls()
+        {
+            var sub = Substitute.For<SimpleClass>();
+
+            sub.VoidMethod(5);
+            sub.Modified.ShouldBe(0);
+
+            sub.ReturnMethod(5).ShouldBe(0);
+            sub.Modified.ShouldBe(0);
+
+            sub.ReturnMethod(5).Returns(10);
+            sub.ReturnMethod(5).ShouldBe(10);
+            sub.Modified.ShouldBe(0);
+        }
+
+        [Test]
+        public void SimpleClass_PartialMock_CallsDefaultImpls()
+        {
+            var sub = Substitute.For<SimpleClass>();
+
+            sub.VoidMethod(5);
+            sub.Modified.ShouldBe(5);
+
+            sub.ReturnMethod(3).ShouldBe(8);
+            sub.Modified.ShouldBe(8);
+
+            sub.ReturnMethod(4).Returns(10); // $$$ whats the right way to do this without triggering the method call?
+            sub.ReturnMethod(4).ShouldBe(10);
+            sub.Modified.ShouldBe(8);
         }
     }
 }
