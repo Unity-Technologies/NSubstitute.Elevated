@@ -5,7 +5,7 @@ using NSubstitute.Exceptions;
 using NUnit.Framework;
 using Shouldly;
 
-namespace Unity.NSubstitute.Tests
+namespace NSubstitute.Elevated.Tests
 {
     [TestFixture]
     class BasicTests
@@ -63,6 +63,7 @@ namespace Unity.NSubstitute.Tests
 
             sub.ShouldBeOfType<ClassWithCtorICall>();
         }
+
 #       endif
 
         [Test]

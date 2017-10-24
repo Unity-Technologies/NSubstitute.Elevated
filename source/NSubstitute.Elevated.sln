@@ -3,11 +3,11 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 15
 VisualStudioVersion = 15.0.27009.1
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Unity.NSubstitute", "Unity.NSubstitute\Unity.NSubstitute.csproj", "{771C49B1-4768-45FA-97BA-37B56268C534}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NSubstitute.Elevated", "NSubstitute.Elevated\NSubstitute.Elevated.csproj", "{771C49B1-4768-45FA-97BA-37B56268C534}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Tests", "Tests", "{0ADFBFB2-69DD-42A9-959C-4B476863594D}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Unity.NSubstitute.Tests", "..\tests\Unity.NSubstitute.Tests\Unity.NSubstitute.Tests.csproj", "{F342F10E-783E-4CA6-B39A-2AE777628E3A}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NSubstitute.Elevated.Tests", "..\tests\NSubstitute.Elevated.Tests\NSubstitute.Elevated.Tests.csproj", "{F342F10E-783E-4CA6-B39A-2AE777628E3A}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{36AEE027-40B5-4ECF-8A1B-4FCAE63C73B3}"
 	ProjectSection(SolutionItems) = preProject
