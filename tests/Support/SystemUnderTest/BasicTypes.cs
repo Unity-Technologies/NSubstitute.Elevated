@@ -6,6 +6,7 @@ using System.Runtime.CompilerServices;
 #endif
 
 // ReSharper disable MemberInitializerValueIgnored
+// ReSharper disable PublicConstructorInAbstractClass
 // ReSharper disable UnusedMember.Local
 // ReSharper disable UnusedParameter.Local
 

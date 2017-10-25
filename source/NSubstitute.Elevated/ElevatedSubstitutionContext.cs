@@ -9,7 +9,11 @@ using NSubstitute.Routing;
 
 namespace NSubstitute.Elevated
 {
-    // this class exists solely to hook in our own proxy factory to the nsub machinery
+    // class motivation:
+    //
+    //   1. it's the clean way to hook in our own proxy factory to the nsub machinery
+    //   2. provide access to the sub manager so patched assemblies can route hooked calls through nsub (the so-called 'elevated' mock part)
+    //
     public class ElevatedSubstitutionContext : ISubstitutionContext
     {
         readonly ISubstitutionContext m_Forwarder;
@@ -18,8 +22,9 @@ namespace NSubstitute.Elevated
         public ElevatedSubstitutionContext([NotNull] ISubstitutionContext forwarder)
         {
             m_Forwarder = forwarder;
+            ElevatedSubstituteManager = new ElevatedSubstituteManager(this);
             m_ElevatedSubstituteFactory = new SubstituteFactory(this,
-                    new CallRouterFactory(), new ElevatedProxyFactory(ElevatedProxyMapper), new CallRouterResolver());
+                    new CallRouterFactory(), ElevatedSubstituteManager, new CallRouterResolver());
         }
 
         public static IDisposable AutoHook()
@@ -36,7 +41,7 @@ namespace NSubstitute.Elevated
                 });
         }
 
-        internal ElevatedProxyMapper ElevatedProxyMapper { get; } = new ElevatedProxyMapper();
+        internal ElevatedSubstituteManager ElevatedSubstituteManager { get; }
 
         // this is the only one we're overriding for now, so we can hook our own factory in there.
         ISubstituteFactory ISubstitutionContext.SubstituteFactory => m_ElevatedSubstituteFactory;

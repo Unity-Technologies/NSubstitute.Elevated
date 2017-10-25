@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace NSubstitute.Elevated
 {
@@ -21,6 +22,11 @@ namespace NSubstitute.Elevated
             if (@this.IsValueType && @this != typeof(void))
                 defaultValue = Activator.CreateInstance(@this);
             return defaultValue;
+        }
+
+        public static bool NullOrEmpty<T>(this IEnumerable<T> @this)
+        {
+            return @this == null || !@this.Any();
         }
     }
 }

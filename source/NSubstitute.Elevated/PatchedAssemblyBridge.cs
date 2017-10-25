@@ -29,7 +29,7 @@ namespace NSubstitute.Elevated.WeaverInternals
             if (method.IsGenericMethodDefinition)
                 method = method.MakeGenericMethod(methodGenericTypes);
 
-            return elevated.ElevatedProxyMapper.TryMock(actualType, instance, mockedReturnType, out mockedReturnValue, method, methodGenericTypes, args);
+            return elevated.ElevatedSubstituteManager.TryMock(actualType, instance, mockedReturnType, out mockedReturnValue, method, methodGenericTypes, args);
         }
     }
 }

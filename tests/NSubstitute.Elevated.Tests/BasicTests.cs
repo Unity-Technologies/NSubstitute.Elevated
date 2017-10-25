@@ -59,7 +59,7 @@ namespace NSubstitute.Elevated.Tests
         }
 
         [Test]
-        public void ClassWithNoDefaultCtor_Mocks()
+        public void ClassWithNoDefaultCtor_TypeDoesNotChange()
         {
             var sub = Substitute.For<ClassWithNoDefaultCtor>();
 
@@ -68,7 +68,7 @@ namespace NSubstitute.Elevated.Tests
 
 #       if TEST_ICALLS
         [Test]
-        public void ClassWithICallInCtor_Mocks()
+        public void ClassWithICallInCtor_TypeDoesNotChange()
         {
             // $ TODO: make this into an actual test of the icall thing. currently just checks that doesn't throw..not that interesting
 
@@ -80,7 +80,7 @@ namespace NSubstitute.Elevated.Tests
 #       endif
 
         [Test]
-        public void ClassWithThrowInCtor_Mocks()
+        public void ClassWithThrowInCtor_TypeDoesNotChange()
         {
             var sub = Substitute.For<ClassWithCtorThrow>();
 
@@ -122,7 +122,7 @@ namespace NSubstitute.Elevated.Tests
         }
 
         [Test]
-        public void ClassWithDependentTypes_Mocks()
+        public void ClassWithDependentTypes_CanUseDependentAssemblies()
         {
             // simple test to ensure that we can patch methods that use types from foreign assemblies
 
@@ -130,6 +130,8 @@ namespace NSubstitute.Elevated.Tests
 
             // ReSharper disable once PossibleNullReferenceException
             sub.GetType().GetMethod("Dummy").ReturnType.FullName.ShouldBe("mycodedep.DependentType");
+
+            // $$$ TODO: test that the type is itself patched (look for __mockthingy)
         }
 
         [Test]
