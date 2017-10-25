@@ -109,15 +109,11 @@ namespace NSubstitute.Elevated
 
             if (callRouter != null)
             {
-                object CallOriginalMethod()
-                {
-                    // $$$ need to turn this into a func reentry which goes straight to the leftover by setting a flag or something
-                    throw new NotSupportedException();
-                }
+                bool shouldCallOriginalMethod = false;
+                var call = m_CallFactory.Create(method, args, instance, () => shouldCallOriginalMethod = true);
+                mockedReturnValue = callRouter.Route(call);
 
-                var call = m_CallFactory.Create(method, args, instance, CallOriginalMethod);
-                mockedReturnValue = callRouter.Route(call); // $$$ may need to copy back mappedInvocation.GetArguments() on top of `args`...unsure
-                return true;
+                return !shouldCallOriginalMethod;
             }
 
             mockedReturnValue = mockedReturnType.GetDefaultValue();
@@ -130,8 +126,8 @@ namespace NSubstitute.Elevated
         //   2. support for struct instances (only possible to associate call routers with individual structs from the inside)
         //   3. is a simple way to check that a type has been patched
         //
-        FieldInfo GetStaticRouterField(Type type) => m_RouterStaticFieldCache.GetOrAdd(type, t => GetRouterField(t, "__mockStaticData", BindingFlags.Static));
-        FieldInfo GetRouterField(Type type) => m_RouterFieldCache.GetOrAdd(type, t => GetRouterField(t, "__mockData", BindingFlags.Instance));
+        FieldInfo GetStaticRouterField(Type type) => m_RouterStaticFieldCache.GetOrAdd(type, t => GetRouterField(t, "__mock__staticData", BindingFlags.Static));
+        FieldInfo GetRouterField(Type type) => m_RouterFieldCache.GetOrAdd(type, t => GetRouterField(t, "__mock__data", BindingFlags.Instance));
 
         static FieldInfo GetRouterField(Type type, string fieldName, BindingFlags bindingFlags)
         {

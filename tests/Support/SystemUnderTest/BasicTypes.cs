@@ -5,6 +5,8 @@ using NSubstitute.Elevated.WeaverInternals;
 using System.Runtime.CompilerServices;
 #endif
 
+#pragma warning disable 169
+// ReSharper disable InconsistentNaming
 // ReSharper disable MemberInitializerValueIgnored
 // ReSharper disable PublicConstructorInAbstractClass
 // ReSharper disable UnusedMember.Local
@@ -77,11 +79,17 @@ namespace SystemUnderTest
 
     public class ClassWithDependency
     {
-        public DependentAssembly.DependentType Dummy => new DependentAssembly.DependentType();
+        public DependentAssembly.DependentType Dummy()
+        {
+            return new DependentAssembly.DependentType();
+        }
     }
 
     public class SimpleClass
     {
+        static object __mock__staticData;
+        object __mock__data;
+
         public int Modified;
 
         // actual
@@ -92,7 +100,7 @@ namespace SystemUnderTest
 
         public void VoidMethod(int count)
         {
-            if (PatchedAssemblyBridge.TryMock(this, new object[] { count }))
+            if (PatchedAssemblyBridgeX.TryMock(typeof(SimpleClass), this, typeof(void), out var _, Type.EmptyTypes, new object[] { count }))
                 return;
 
             Modified += count;
@@ -100,7 +108,7 @@ namespace SystemUnderTest
 
         public int ReturnMethod(int count)
         {
-            if (PatchedAssemblyBridge.TryMock(out var returnValue, this, new object[] { count }))
+            if (PatchedAssemblyBridgeX.TryMock(typeof(SimpleClass), this, typeof(int), out var returnValue, Type.EmptyTypes, new object[] { count }))
                 return (int)returnValue;
 
             return Modified += count;
@@ -110,19 +118,10 @@ namespace SystemUnderTest
 
 namespace NSubstitute.Elevated.WeaverInternals
 {
-    public static class PatchedAssemblyBridge
+    public static class PatchedAssemblyBridgeX
     {
-        public static bool TryMock(object instance, object[] methodCallArgs)
-        {
-            return false;
-        }
+        public delegate bool TryMockProc(Type actualType, object instance, Type mockedReturnType, out object mockedReturnValue, Type[] methodGenericTypes, object[] args);
 
-        public static bool TryMock(out object returnValue, object instance, object[] methodCallArgs)
-        {
-            returnValue = null;
-            // $$$ use https://stackoverflow.com/a/353073 when figure out what return value type is
-
-            return false;
-        }
+        public static TryMockProc TryMock;
     }
 }

@@ -1,5 +1,6 @@
 using System;
 using SystemUnderTest;
+using NSubstitute.Elevated.WeaverInternals;
 using NSubstitute.Exceptions;
 using NUnit.Framework;
 using Shouldly;
@@ -15,6 +16,7 @@ namespace NSubstitute.Elevated.Tests
         public void Setup()
         {
             m_Dispose = ElevatedSubstitutionContext.AutoHook();
+            PatchedAssemblyBridgeX.TryMock = PatchedAssemblyBridge.TryMock;
         }
 
         [OneTimeTearDown]
@@ -118,7 +120,7 @@ namespace NSubstitute.Elevated.Tests
         public void NonMockedClassWithDependentTypes_Loads()
         {
             // ReSharper disable once PossibleNullReferenceException
-            typeof(ClassWithDependency).GetMethod("Dummy").ReturnType.FullName.ShouldBe("mycodedep.DependentType");
+            typeof(ClassWithDependency).GetMethod("Dummy").ReturnType.FullName.ShouldBe("DependentAssembly.DependentType");
         }
 
         [Test]
@@ -153,7 +155,7 @@ namespace NSubstitute.Elevated.Tests
         [Test]
         public void SimpleClass_PartialMock_CallsDefaultImpls()
         {
-            var sub = Substitute.For<SimpleClass>();
+            var sub = Substitute.ForPartsOf<SimpleClass>();
 
             sub.VoidMethod(5);
             sub.Modified.ShouldBe(5);
@@ -161,7 +163,7 @@ namespace NSubstitute.Elevated.Tests
             sub.ReturnMethod(3).ShouldBe(8);
             sub.Modified.ShouldBe(8);
 
-            sub.ReturnMethod(4).Returns(10); // $$$ whats the right way to do this without triggering the method call?
+            sub.ReturnMethod(Arg.Is(4)).Returns(10);
             sub.ReturnMethod(4).ShouldBe(10);
             sub.Modified.ShouldBe(8);
         }
