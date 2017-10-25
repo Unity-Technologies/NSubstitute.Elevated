@@ -1,6 +1,9 @@
 using System;
 using NUnit.Framework;
 
+#pragma warning disable 169
+// ReSharper disable InconsistentNaming
+
 namespace NSubstitute.Elevated.Tests
 {
     [TestFixture]

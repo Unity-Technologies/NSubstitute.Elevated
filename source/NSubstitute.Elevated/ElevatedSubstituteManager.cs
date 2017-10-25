@@ -79,15 +79,15 @@ namespace NSubstitute.Elevated
             field.SetValue(null, callRouter);
 
             return new SubstituteStatic.Proxy(new DelegateDisposable(() =>
-            {
-                var found = field.GetValue(null);
-                if (found == null)
-                    throw new SubstituteException("Unexpected static unmock of an already unmocked type");
-                if (found != callRouter)
-                    throw new SubstituteException("Discovered unexpected call router attached in static mock context");
+                {
+                    var found = field.GetValue(null);
+                    if (found == null)
+                        throw new SubstituteException("Unexpected static unmock of an already unmocked type");
+                    if (found != callRouter)
+                        throw new SubstituteException("Discovered unexpected call router attached in static mock context");
 
-                field.SetValue(null, null);
-            }));
+                    field.SetValue(null, null);
+                }));
         }
 
         object CreateProxy(Type typeToProxy, ICallRouter callRouter)
@@ -109,16 +109,16 @@ namespace NSubstitute.Elevated
 
             if (callRouter != null)
             {
-                Func<object> baseResult = () => invocation.Proceed(); // $$$ need to turn this into a func reentry which goes straight to the leftover
-                var result = new Lazy<object>(baseResult);
-                Func<object> baseMethod = () => result.Value;
+                object CallOriginalMethod()
+                {
+                    // $$$ need to turn this into a func reentry which goes straight to the leftover by setting a flag or something
+                    throw new NotSupportedException();
+                }
 
-                var mappedInvocation = m_CallFactory.Create(method, args, instance, baseMethod);
-                Array.Copy(mappedInvocation.GetArguments(), args, args.Length); // $$$ unsure about this..apparently need to copy back results, but our version has a bug on this
-                mockedReturnValue = callRouter.Route(mappedInvocation);
+                var call = m_CallFactory.Create(method, args, instance, CallOriginalMethod);
+                mockedReturnValue = callRouter.Route(call); // $$$ may need to copy back mappedInvocation.GetArguments() on top of `args`...unsure
                 return true;
             }
-
 
             mockedReturnValue = mockedReturnType.GetDefaultValue();
             return false;

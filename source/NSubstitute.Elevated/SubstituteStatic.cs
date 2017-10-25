@@ -11,7 +11,7 @@ namespace NSubstitute.Elevated
             readonly IDisposable m_Forwarder;
 
             internal Proxy(IDisposable forwarder)
-                => m_Forwarder = forwarder;
+            => m_Forwarder = forwarder;
 
             public void Dispose()
             {
