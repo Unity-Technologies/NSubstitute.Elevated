@@ -6,7 +6,6 @@ using Shouldly;
 
 namespace NSubstitute.Elevated.Tests
 {
-
     [TestFixture]
     public class ElevatedWeaverTests
     {
@@ -32,8 +31,8 @@ namespace NSubstitute.Elevated.Tests
 
                 class ClassWithGeneratedNestedType
                 {
-	                public IEnumerable<int> Foo()           // this causes a state machine type to be generated which shouldn't be patched
-                        { yield return 1; }   
+                    public IEnumerable<int> Foo()           // this causes a state machine type to be generated which shouldn't be patched
+                        { yield return 1; }
                 }
 
             }
@@ -78,9 +77,8 @@ namespace NSubstitute.Elevated.Tests
         [Test]
         public void PrivateNestedTypes_ShouldNotPatch()
         {
-            var type = m_FixtureTestAssembly.GetType("ShouldNotPatch.ClassWithPrivateNestedType");
-            var nestedType = type.NestedTypes.Single(t => t.Name == "PrivateNested");
-            MockInjector.IsPatched(nestedType).ShouldBeFalse();
+            var type = m_FixtureTestAssembly.GetType("ShouldNotPatch.ClassWithPrivateNestedType/PrivateNested");
+            MockInjector.IsPatched(type).ShouldBeFalse();
         }
 
         [Test]
@@ -101,17 +99,15 @@ namespace NSubstitute.Elevated.Tests
         [Test]
         public void PublicNestedClasses_ShouldPatch()
         {
-            var type = m_FixtureTestAssembly.GetType("ShouldPatch.ClassWithNestedTypes");
-            var nestedType = type.NestedTypes.Single(t => t.Name == "PublicNested");
-            MockInjector.IsPatched(nestedType).ShouldBeTrue();
+            var type = m_FixtureTestAssembly.GetType("ShouldPatch.ClassWithNestedTypes/PublicNested");
+            MockInjector.IsPatched(type).ShouldBeTrue();
         }
 
         [Test]
         public void InternalNestedClasses_ShouldPatch()
         {
-            var type = m_FixtureTestAssembly.GetType("ShouldPatch.ClassWithNestedTypes");
-            var nestedType = type.NestedTypes.Single(t => t.Name == "InternalNested");
-            MockInjector.IsPatched(nestedType).ShouldBeTrue();
+            var type = m_FixtureTestAssembly.GetType("ShouldPatch.ClassWithNestedTypes/InternalNested");
+            MockInjector.IsPatched(type).ShouldBeTrue();
         }
     }
 }

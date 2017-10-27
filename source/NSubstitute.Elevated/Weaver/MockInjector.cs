@@ -97,34 +97,27 @@ namespace NSubstitute.Elevated.Weaver
                 return;
             if (type.Name == "<Module>")
                 return;
-            if (type.CustomAttributes.Any(a =>
-                    a.AttributeType.FullName == typeof(CompilerGeneratedAttribute).FullName ||
-                    a.AttributeType.FullName == typeof(StructLayoutAttribute).FullName))
+            if (type.IsExplicitLayout)
+                return;
+            if (type.CustomAttributes.Any(a => a.AttributeType.FullName == typeof(CompilerGeneratedAttribute).FullName))
                 return;
 
             try
             {
-                var patched = false;
                 foreach (var method in type.Methods)
+                    Patch(method);
+
+                void AddField(string fieldName, FieldAttributes fieldAttributes)
                 {
-                    if (Patch(method))
-                        patched = true;
+                    type.Fields.Add(new FieldDefinition(fieldName,
+                            FieldAttributes.Private | FieldAttributes.NotSerialized | fieldAttributes,
+                            type.Module.TypeSystem.Object));
                 }
 
-                if (patched)
-                {
-                    void AddField(string fieldName, FieldAttributes fieldAttributes)
-                    {
-                        type.Fields.Add(new FieldDefinition(fieldName,
-                                FieldAttributes.Private | FieldAttributes.NotSerialized | fieldAttributes,
-                                type.Module.TypeSystem.Object));
-                    }
+                AddField(InjectedMockStaticDataName, FieldAttributes.Static);
+                AddField(InjectedMockDataName, 0);
 
-                    AddField(InjectedMockStaticDataName, FieldAttributes.Static);
-                    AddField(InjectedMockDataName, 0);
-
-                    AddMockCtor(type);
-                }
+                AddMockCtor(type);
             }
             catch (Exception e)
             {
@@ -179,14 +172,12 @@ namespace NSubstitute.Elevated.Weaver
             type.Methods.Add(ctor);
         }
 
-        bool Patch(MethodDefinition method)
+        void Patch(MethodDefinition method)
         {
             if (method.IsCompilerControlled || method.IsConstructor || method.IsAbstract)
-                return false;
+                return;
 
             // $$$ DOWIT
-
-            return true;
         }
     }
 }
