@@ -1,17 +1,8 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using JetBrains.Annotations;
 
-namespace NSubstitute.Elevated.Utilities
+namespace NSubstitute.Elevated
 {
-    public class DelegateDisposable : IDisposable
-    {
-        readonly Action m_DisposeAction;
-
-        public DelegateDisposable([NotNull] Action disposeAction) => m_DisposeAction = disposeAction;
-
-        public void Dispose()
-        {
-            m_DisposeAction();
-        }
-    }
 }

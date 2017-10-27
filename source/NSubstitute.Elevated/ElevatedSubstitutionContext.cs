@@ -3,13 +3,13 @@ using System.Collections.Generic;
 using JetBrains.Annotations;
 using NSubstitute.Core;
 using NSubstitute.Core.Arguments;
-using NSubstitute.Elevated.Utilities;
 using NSubstitute.Exceptions;
 using NSubstitute.Routing;
+using Unity.Core;
 
 namespace NSubstitute.Elevated
 {
-    // class motivation:
+    // motivation:
     //
     //   1. it's the clean way to hook in our own proxy factory to the nsub machinery
     //   2. provide access to the sub manager so patched assemblies can route hooked calls through nsub (the so-called 'elevated' mock part)
@@ -19,12 +19,13 @@ namespace NSubstitute.Elevated
         readonly ISubstitutionContext m_Forwarder;
         readonly ISubstituteFactory m_ElevatedSubstituteFactory;
 
+        // ReSharper disable once MemberCanBePrivate.Global
         public ElevatedSubstitutionContext([NotNull] ISubstitutionContext forwarder)
         {
             m_Forwarder = forwarder;
             ElevatedSubstituteManager = new ElevatedSubstituteManager(this);
             m_ElevatedSubstituteFactory = new SubstituteFactory(this,
-                    new CallRouterFactory(), ElevatedSubstituteManager, new CallRouterResolver());
+                    new ElevatedCallRouterFactory(), ElevatedSubstituteManager, new CallRouterResolver());
         }
 
         public static IDisposable AutoHook()
@@ -42,6 +43,23 @@ namespace NSubstitute.Elevated
         }
 
         internal ElevatedSubstituteManager ElevatedSubstituteManager { get; }
+
+        class ElevatedCallRouterFactory : ICallRouterFactory
+        {
+            public ICallRouter Create(ISubstitutionContext substitutionContext, SubstituteConfig config)
+            => new ElevatedCallRouter(new SubstituteState(substitutionContext, config), substitutionContext, new RouteFactory());
+        }
+
+        class ElevatedCallRouter : CallRouter
+        {
+            public ElevatedCallRouter(ISubstituteState substituteState, ISubstitutionContext context, IRouteFactory routeFactory)
+                : base(substituteState, context, routeFactory) => SubstituteConfig = substituteState.SubstituteConfig;
+
+            public SubstituteConfig SubstituteConfig { get; }
+        }
+
+        internal static SubstituteConfig? TryGetSubstituteConfig(ICallRouter callRouter)
+        => (callRouter as ElevatedCallRouter)?.SubstituteConfig;
 
         // this is the only one we're overriding for now, so we can hook our own factory in there.
         ISubstituteFactory ISubstitutionContext.SubstituteFactory => m_ElevatedSubstituteFactory;

@@ -3,11 +3,15 @@ using System.Diagnostics;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using NSubstitute.Core;
+using Unity.Core;
 
 // this namespace contains types that must be public in order to be usable from patched assemblies, yet
 // we do not want used from normal client api
 namespace NSubstitute.Elevated.WeaverInternals
 {
+    // used when generating mocked default ctors
+    public class MockPlaceholderType {}
+
     // important: keep all non-mscorlib types out of the public surface area of this class, so as to
     // avoid needing to add more references than NSubstitute.Elevated to the assembly during patching.
 

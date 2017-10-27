@@ -3,11 +3,12 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using NSubstitute.Core;
-using NSubstitute.Elevated.Utilities;
+using NSubstitute.Elevated.WeaverInternals;
 using NSubstitute.Exceptions;
 using NSubstitute.Proxies;
 using NSubstitute.Proxies.CastleDynamicProxy;
 using NSubstitute.Proxies.DelegateProxy;
+using Unity.Core;
 
 namespace NSubstitute.Elevated
 {
@@ -15,6 +16,7 @@ namespace NSubstitute.Elevated
     {
         readonly CallFactory m_CallFactory;
         readonly IProxyFactory m_DefaultProxyFactory = new ProxyFactory(new DelegateProxyFactory(), new CastleDynamicProxyFactory());
+        readonly object[] k_MockedCtorParams = { new MockPlaceholderType() };
 
         public ElevatedSubstituteManager(ISubstitutionContext substitutionContext)
         {
@@ -23,14 +25,17 @@ namespace NSubstitute.Elevated
 
         object IProxyFactory.GenerateProxy(ICallRouter callRouter, Type typeToProxy, Type[] additionalInterfaces, object[] constructorArguments)
         {
+            // TODO:
+            //  * new type MockCtorPlaceholder in elevated assy
+            //  * generate new empty ctor that takes MockCtorPlaceholder in all mocked types
+            //  * support ctor params. throw if foudn and not ForPartsOf. then ForPartsOf determines which ctor we use.
+            //  * have a note about static ctors. because they are special, and do not support disposal, can't really mock them right.
+            //    best for user to do mock/unmock of static ctors manually (i.e. move into StaticInit/StaticDispose and call directly from test code)
+
             object proxy;
+            var substituteConfig = ElevatedSubstitutionContext.TryGetSubstituteConfig(callRouter);
 
-            var shouldForward = typeToProxy.IsInterface;
-
-            // TEMP
-            shouldForward |= typeToProxy.FullName != "SystemUnderTest.SimpleClass";
-
-            if (shouldForward)
+            if (typeToProxy.IsInterface || substituteConfig == null)
             {
                 proxy = m_DefaultProxyFactory.GenerateProxy(callRouter, typeToProxy, additionalInterfaces, constructorArguments);
             }
@@ -53,18 +58,18 @@ namespace NSubstitute.Elevated
                 if (additionalInterfaces.Any())
                     throw new SubstituteException("Cannot add interfaces at runtime to patched types");
 
-                // nsubstitute's dynamic proxy works on concrete classes by inheriting via a runtime-generated type, overriding
-                // virtuals with interceptor behavior. because the base is unmodified, it needs ctor params to be passed in
-                // for the proxy to pass to base. this in turn likely runs code, and we're not really working with an actual
-                // mock.
-                //
-                // elevated mocking via assembly patching, by contrast, lets us a) insert a new default ctor where missing, and
-                // b) bypass any existing default ctor code from executing. we end up with a true mock. therefore, it makes no
-                // sense to ever pass in ctor args, so this case becomes an exception.
-                if (constructorArguments.Any())
-                    throw new SubstituteException("Do not pass ctor args when substituting with elevated mocks");
+                if (substituteConfig == SubstituteConfig.OverrideAllCalls)
+                {
+                    // overriding all calls includes the ctor, so it makes no sense for the user to pass in ctor args
+                    if (constructorArguments.Any())
+                        throw new SubstituteException("Do not pass ctor args when substituting with elevated mocks (or did you mean to use ForPartsOf?)");
 
-                proxy = CreateProxy(typeToProxy, callRouter);
+                    // but we use a ctor arg to select the special empty ctor that we patched in
+                    constructorArguments = k_MockedCtorParams;
+                }
+
+                proxy = Activator.CreateInstance(typeToProxy, constructorArguments);
+                GetRouterField(typeToProxy).SetValue(proxy, callRouter);
             }
 
             return proxy;
@@ -90,16 +95,6 @@ namespace NSubstitute.Elevated
                 }));
         }
 
-        object CreateProxy(Type typeToProxy, ICallRouter callRouter)
-        {
-            var field = GetRouterField(typeToProxy);
-
-            var newInstance = Activator.CreateInstance(typeToProxy);
-            field.SetValue(newInstance, callRouter);
-
-            return newInstance;
-        }
-
         // called from patched assembly code via the PatchedAssemblyBridge. return true if the mock is handling the behavior.
         // false means that the original implementation should run.
         public bool TryMock(Type actualType, object instance, Type mockedReturnType, out object mockedReturnValue, MethodInfo method, Type[] methodGenericTypes, object[] args)
@@ -109,7 +104,7 @@ namespace NSubstitute.Elevated
 
             if (callRouter != null)
             {
-                bool shouldCallOriginalMethod = false;
+                var shouldCallOriginalMethod = false;
                 var call = m_CallFactory.Create(method, args, instance, () => shouldCallOriginalMethod = true);
                 mockedReturnValue = callRouter.Route(call);
 
@@ -126,10 +121,10 @@ namespace NSubstitute.Elevated
         //   2. support for struct instances (only possible to associate call routers with individual structs from the inside)
         //   3. is a simple way to check that a type has been patched
         //
-        FieldInfo GetStaticRouterField(Type type) => m_RouterStaticFieldCache.GetOrAdd(type, t => GetRouterField(t, "__mock__staticData", BindingFlags.Static));
-        FieldInfo GetRouterField(Type type) => m_RouterFieldCache.GetOrAdd(type, t => GetRouterField(t, "__mock__data", BindingFlags.Instance));
+        FieldInfo GetStaticRouterField(Type type) => m_RouterStaticFieldCache.GetOrAdd(type, t => GetRouterField(t, Weaver.MockInjector.InjectedMockStaticDataName, BindingFlags.Static));
+        FieldInfo GetRouterField(Type type) => m_RouterFieldCache.GetOrAdd(type, t => GetRouterField(t, Weaver.MockInjector.InjectedMockDataName, BindingFlags.Instance));
 
-        static FieldInfo GetRouterField(Type type, string fieldName, BindingFlags bindingFlags)
+        static FieldInfo GetRouterField(IReflect type, string fieldName, BindingFlags bindingFlags)
         {
             var field = type.GetField(fieldName, bindingFlags | BindingFlags.NonPublic);
             if (field == null)
