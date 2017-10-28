@@ -21,6 +21,7 @@ namespace Unity.Core.Tests
         {
             IReadOnlyDictionary<string, int> dictionary = null;
 
+            // ReSharper disable once ExpressionIsAlwaysNull
             dictionary.OrEmpty().ShouldBeEmpty();
         }
 

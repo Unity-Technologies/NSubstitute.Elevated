@@ -48,6 +48,7 @@ namespace Unity.Core.Tests
         {
             IEnumerable<string> enumerable = null;
 
+            // ReSharper disable once ExpressionIsAlwaysNull
             enumerable.OrEmpty().ShouldBeEmpty();
         }
 

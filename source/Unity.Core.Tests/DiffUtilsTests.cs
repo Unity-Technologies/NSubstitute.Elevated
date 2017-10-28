@@ -1,7 +1,6 @@
-using System.Linq;
+using System;
 using NUnit.Framework;
 using Shouldly;
-using Unity.Core;
 
 namespace Unity.Core.Tests
 {

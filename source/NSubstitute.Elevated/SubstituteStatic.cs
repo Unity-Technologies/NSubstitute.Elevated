@@ -10,19 +10,8 @@ namespace NSubstitute.Elevated
         {
             readonly IDisposable m_Forwarder;
 
-            internal Proxy(IDisposable forwarder)
-            => m_Forwarder = forwarder;
-
-            public void Dispose()
-            {
-                m_Forwarder.Dispose();
-            }
-
-            public Proxy Static(Action action)
-            {
-                action();
-                return this;
-            }
+            internal Proxy(IDisposable forwarder) => m_Forwarder = forwarder;
+            public void Dispose() => m_Forwarder.Dispose();
         }
 
         // best to wrap static substitutes in `using` so they will auto-dispose. this is important because we're dealing with
