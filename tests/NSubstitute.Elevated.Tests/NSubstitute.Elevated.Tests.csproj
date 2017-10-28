@@ -26,4 +26,8 @@
     <ProjectReference Include="..\Support\SystemUnderTest\SystemUnderTest.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Reference Include="Microsoft.Build.Utilities.v4.0" />
+  </ItemGroup>
+
 </Project>

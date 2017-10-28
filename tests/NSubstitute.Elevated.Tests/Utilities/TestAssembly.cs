@@ -1,5 +1,6 @@
 using System;
 using System.CodeDom.Compiler;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -8,7 +9,7 @@ using NSubstitute.Elevated.Weaver;
 using Shouldly;
 using Unity.Core;
 
-namespace NSubstitute.Elevated.Tests
+namespace NSubstitute.Elevated.Tests.Utilities
 {
     public class TestAssembly : IDisposable
     {
@@ -44,6 +45,8 @@ namespace NSubstitute.Elevated.Tests
 
             m_TestAssemblyPath = compilerResult.PathToAssembly;
 
+            PeVerify.Verify(m_TestAssemblyPath); // pre-check..sometimes we can compile code that doesn't verify
+
             var results = ElevatedWeaver.PatchAllDependentAssemblies(m_TestAssemblyPath, PatchTestAssembly.Yes);
             results.Count.ShouldBe(2);
             results.ShouldContain(new PatchResult("mscorlib", null, PatchState.IgnoredOutsideAllowedPaths));
@@ -51,6 +54,8 @@ namespace NSubstitute.Elevated.Tests
 
             m_TestAssembly = AssemblyDefinition.ReadAssembly(m_TestAssemblyPath);
             MockInjector.IsPatched(m_TestAssembly).ShouldBeTrue();
+
+            PeVerify.Verify(m_TestAssemblyPath);
         }
 
         public void Dispose()
@@ -63,5 +68,6 @@ namespace NSubstitute.Elevated.Tests
         }
 
         public TypeDefinition GetType(string typeName) => m_TestAssembly.MainModule.GetType(typeName);
+        public IEnumerable<TypeDefinition> SelectTypes(IncludeNested includeNested) => m_TestAssembly.SelectTypes(includeNested);
     }
 }

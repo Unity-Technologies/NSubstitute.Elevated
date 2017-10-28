@@ -1,8 +1,6 @@
 using System;
-using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
 using System.Security.Policy;
 using Mono.Cecil;
 using Mono.Cecil.Cil;
@@ -152,16 +150,22 @@ namespace NSubstitute.Elevated.Weaver
 
             var il = body.GetILProcessor();
 
-            var baseCtor = (MethodReference)type
-                .BaseType.Resolve()
-                .GetConstructors()
-                .SingleOrDefault(candidate => candidate.Parameters.SequenceEqual(ctor.Parameters));
-            if (baseCtor != null)
+            var baseCtors = type.BaseType.Resolve().GetConstructors();
+
+            var baseMockCtor = (MethodReference)baseCtors.SingleOrDefault(c => c.Parameters.SequenceEqual(ctor.Parameters));
+            if (baseMockCtor != null)
             {
-                if (type.BaseType.IsGenericInstance)
-                    baseCtor = new MethodReference(baseCtor.Name, baseCtor.ReturnType, type.BaseType) { HasThis = baseCtor.HasThis };
-                else if (baseCtor.Module != type.Module)
-                    baseCtor = type.Module.ImportReference(baseCtor);
+                baseMockCtor = type.BaseType.IsGenericInstance
+                    ? new MethodReference(baseMockCtor.Name, baseMockCtor.ReturnType, type.BaseType) { HasThis = baseMockCtor.HasThis }
+                    : type.Module.ImportReference(baseMockCtor);
+
+                il.Append(il.Create(OpCodes.Ldarg_0));
+                il.Append(il.Create(OpCodes.Ldarg_1));
+                il.Append(il.Create(OpCodes.Call, baseMockCtor));
+            }
+            else
+            {
+                var baseCtor = type.Module.ImportReference(baseCtors.Single(c => !c.Parameters.Any()));
 
                 il.Append(il.Create(OpCodes.Ldarg_0));
                 il.Append(il.Create(OpCodes.Call, baseCtor));

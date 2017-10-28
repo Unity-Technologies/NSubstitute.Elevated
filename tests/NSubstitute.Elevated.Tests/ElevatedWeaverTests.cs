@@ -1,10 +1,12 @@
 using System;
 using System.Linq;
+using Mono.Cecil.Rocks;
 using NSubstitute.Elevated.Weaver;
+using NSubstitute.Elevated.WeaverInternals;
 using NUnit.Framework;
 using Shouldly;
 
-namespace NSubstitute.Elevated.Tests
+namespace NSubstitute.Elevated.Tests.Utilities
 {
     [TestFixture]
     public class ElevatedWeaverTests
@@ -21,8 +23,8 @@ namespace NSubstitute.Elevated.Tests
             {
                 interface Interface { void Foo(); }         // ordinary proxying works
 
-                [StructLayout(LayoutKind.Explicit)]
-                struct StructWithLayoutAttr { }             // don't want to risk breaking things by changing size
+                [StructLayout(LayoutKind.Explicit, Size=4)] // size is necessary to make peverify happy when using StructLayout
+                struct StructWithLayoutAttr { }             // don't patch these because adding a field may ruin serialization or blitting or something
 
                 class ClassWithPrivateNestedType
                 {
@@ -34,7 +36,6 @@ namespace NSubstitute.Elevated.Tests
                     public IEnumerable<int> Foo()           // this causes a state machine type to be generated which shouldn't be patched
                         { yield return 1; }
                 }
-
             }
 
             namespace ShouldPatch
@@ -45,7 +46,6 @@ namespace NSubstitute.Elevated.Tests
                     internal class InternalNested { }
                 }
             }
-
             ";
 
         [OneTimeSetUp]
@@ -108,6 +108,21 @@ namespace NSubstitute.Elevated.Tests
         {
             var type = m_FixtureTestAssembly.GetType("ShouldPatch.ClassWithNestedTypes/InternalNested");
             MockInjector.IsPatched(type).ShouldBeTrue();
+        }
+
+        [Test]
+        public void Injection_IsConsistentForAllTypes()
+        {
+            // whatever the reasons are for a given type getting patched or not, we want it to be internally consistent
+            foreach (var type in m_FixtureTestAssembly.SelectTypes(IncludeNested.Yes))
+            {
+                var mockStaticField = type.Fields.SingleOrDefault(f => f.Name == MockInjector.InjectedMockStaticDataName);
+                var mockField = type.Fields.SingleOrDefault(f => f.Name == MockInjector.InjectedMockDataName);
+                var mockCtor = type.GetConstructors().SingleOrDefault(c => c.Parameters.Count == 1 && c.Parameters[0].ParameterType.FullName == typeof(MockPlaceholderType).FullName);
+
+                var count = (mockStaticField != null ? 1 : 0) + (mockField != null ? 1 : 0) + (mockCtor != null ? 1 : 0);
+                count.ShouldBeOneOf(0, 3);
+            }
         }
     }
 }
