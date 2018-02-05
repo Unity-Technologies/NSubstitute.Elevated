@@ -1,14 +1,20 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
+using Mono.Cecil;
+using Mono.Cecil.Cil;
 using NSubstitute.Core;
+using NSubstitute.Elevated.Weaver;
 using NSubstitute.Elevated.WeaverInternals;
 using NSubstitute.Exceptions;
 using NSubstitute.Proxies;
 using NSubstitute.Proxies.CastleDynamicProxy;
 using NSubstitute.Proxies.DelegateProxy;
 using Unity.Core;
+using FieldAttributes = Mono.Cecil.FieldAttributes;
+using TypeAttributes = Mono.Cecil.TypeAttributes;
 
 namespace NSubstitute.Elevated
 {
@@ -23,6 +29,53 @@ namespace NSubstitute.Elevated
             m_CallFactory = new CallFactory(substitutionContext);
         }
 
+        void AddMockPlaceholderToAssembly(AssemblyDefinition targetAssembly)
+        {
+            var mockPlaceholder = new TypeDefinition("NSubstitute.Elevated.WeaverInternals", "MockPlaceholderType", TypeAttributes.Public | TypeAttributes.Class | TypeAttributes.AnsiClass | TypeAttributes.BeforeFieldInit)
+            {
+                BaseType = targetAssembly.MainModule.TypeSystem.Object
+            };
+            targetAssembly.MainModule.Types.Add(mockPlaceholder);
+        }
+
+        // TODO: Fix
+        const string peVerifyLocation = @"C:\Program Files (x86)\Microsoft SDKs\Windows\v10.0A\bin\NETFX 4.6.1 Tools\x64\PEVerify.exe";
+        static void Verify(string assemblyName)
+        {
+            var p = new Process
+            {
+                StartInfo =
+                {
+                    Arguments = $"/nologo \"{assemblyName}\"",
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    FileName = peVerifyLocation,
+                    RedirectStandardError = true,
+                    RedirectStandardOutput = true
+                }
+            };
+
+            var error = "";
+            var output = "";
+
+            p.OutputDataReceived += (_, e) => output += $"{e.Data}\n";
+            p.ErrorDataReceived += (_, e) => error += $"{e.Data}\n";
+
+            p.Start();
+            p.BeginOutputReadLine();
+            p.BeginErrorReadLine();
+
+            p.WaitForExit();
+
+            Console.WriteLine(assemblyName);
+            if (p.ExitCode != 0)
+            {
+                Console.Error.WriteLine($"{error}\n{output}");
+                Environment.Exit(p.ExitCode);
+            }
+
+        }
+
         object IProxyFactory.GenerateProxy(ICallRouter callRouter, Type typeToProxy, Type[] additionalInterfaces, object[] constructorArguments)
         {
             // TODO:
@@ -31,6 +84,9 @@ namespace NSubstitute.Elevated
             //  * support ctor params. throw if foudn and not ForPartsOf. then ForPartsOf determines which ctor we use.
             //  * have a note about static ctors. because they are special, and do not support disposal, can't really mock them right.
             //    best for user to do mock/unmock of static ctors manually (i.e. move into StaticInit/StaticDispose and call directly from test code)
+
+            var patchAllDependentAssemblies = ElevatedWeaver.PatchAllDependentAssemblies(Assembly.GetAssembly(typeToProxy).Location, PatchTestAssembly.Yes).ToList();
+            Verify(patchAllDependentAssemblies[1].Path);
 
             object proxy;
             var substituteConfig = ElevatedSubstitutionContext.TryGetSubstituteConfig(callRouter);
@@ -68,11 +124,42 @@ namespace NSubstitute.Elevated
                     constructorArguments = k_MockedCtorParams;
                 }
 
-                proxy = Activator.CreateInstance(typeToProxy, constructorArguments);
+                proxy = Activator.CreateInstanceFrom(patchAllDependentAssemblies[1].Path, typeToProxy.FullName, false,
+                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.CreateInstance, null,
+                    constructorArguments, null, null);
+
+                //proxy = Activator.CreateInstance(typeToProxy, constructorArguments);
                 GetRouterField(typeToProxy).SetValue(proxy, callRouter);
             }
 
             return proxy;
+        }
+
+        static FieldDefinition CreateFakeFieldForward(TypeDefinition typeDefinition)
+        {
+            var field = new FieldDefinition(k_FakeForward, FieldAttributes.Assembly, typeDefinition); // TODO: GetName as param
+            typeDefinition.Fields.Add(field);
+            return field;
+        }
+
+        const string k_FakeForward = "__fake_forward";
+        static FieldDefinition FakeForwardField(TypeDefinition typeDefinition)
+        {
+            return typeDefinition.Fields.Single(f => f.Name == k_FakeForward);
+        }
+
+        static void AddBaseTypeCtorCall(AssemblyDefinition target, TypeDefinition typeDefinition,
+            MethodDefinition methodDefinition)
+        {
+            if (typeDefinition.BaseType != null && !typeDefinition.IsValueType)
+            {
+                methodDefinition.Body.Instructions.Add(Instruction.Create(OpCodes.Ldarg_0));
+                var baseTypeCtor =
+                    target.MainModule.Import(
+                        typeDefinition.BaseType.Resolve()
+                            .Methods.Single(m => m.IsConstructor && m.Parameters.Count == 0));
+                methodDefinition.Body.Instructions.Add(Instruction.Create(OpCodes.Call, baseTypeCtor));
+            }
         }
 
         object CreateStaticProxy(Type typeToProxy, ICallRouter callRouter)

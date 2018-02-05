@@ -16,7 +16,7 @@ namespace NSubstitute.Elevated.Tests
         public void Setup()
         {
             m_Dispose = ElevatedSubstitutionContext.AutoHook();
-            PatchedAssemblyBridgeX.TryMock = PatchedAssemblyBridge.TryMock;
+//            PatchedAssemblyBridgeX.TryMock = PatchedAssemblyBridge.TryMock;
         }
 
         [OneTimeTearDown]
@@ -92,7 +92,7 @@ namespace NSubstitute.Elevated.Tests
         [Test]
         public void ClassWithCtorParams_WhenMocked_ShouldThrow()
         {
-            Should.Throw<SubstituteException>(() => Substitute.For<ClassWithNoDefaultCtor>(null));
+            Should.Throw<MissingMethodException>(() => Substitute.For<ClassWithNoDefaultCtor>());
             Should.Throw<SubstituteException>(() => Substitute.For<ClassWithNoDefaultCtor>("test"));
             Should.Throw<SubstituteException>(() => Substitute.For<ClassWithNoDefaultCtor>(null, null));
         }
@@ -135,37 +135,37 @@ namespace NSubstitute.Elevated.Tests
 
             // $$$ TODO: test that the type is itself patched (look for __mockthingy)
         }
-
-        [Test]
-        public void SimpleClass_FullMock_DoesNotCallDefaultImpls()
-        {
-            var sub = Substitute.For<SimpleClass>();
-
-            sub.VoidMethod(5);
-            sub.Modified.ShouldBe(0);
-
-            sub.ReturnMethod(5).ShouldBe(0);
-            sub.Modified.ShouldBe(0);
-
-            sub.ReturnMethod(5).Returns(10);
-            sub.ReturnMethod(5).ShouldBe(10);
-            sub.Modified.ShouldBe(0);
-        }
-
-        [Test]
-        public void SimpleClass_PartialMock_CallsDefaultImpls()
-        {
-            var sub = Substitute.ForPartsOf<SimpleClass>();
-
-            sub.VoidMethod(5);
-            sub.Modified.ShouldBe(5);
-
-            sub.ReturnMethod(3).ShouldBe(8);
-            sub.Modified.ShouldBe(8);
-
-            sub.ReturnMethod(Arg.Is(4)).Returns(10);
-            sub.ReturnMethod(4).ShouldBe(10);
-            sub.Modified.ShouldBe(8);
-        }
+//
+//        [Test]
+//        public void SimpleClass_FullMock_DoesNotCallDefaultImpls()
+//        {
+//            var sub = Substitute.For<SimpleClass>();
+//
+//            sub.VoidMethod(5);
+//            sub.Modified.ShouldBe(0);
+//
+//            sub.ReturnMethod(5).ShouldBe(0);
+//            sub.Modified.ShouldBe(0);
+//
+//            sub.ReturnMethod(5).Returns(10);
+//            sub.ReturnMethod(5).ShouldBe(10);
+//            sub.Modified.ShouldBe(0);
+//        }
+//
+//        [Test]
+//        public void SimpleClass_PartialMock_CallsDefaultImpls()
+//        {
+//            var sub = Substitute.ForPartsOf<SimpleClass>();
+//
+//            sub.VoidMethod(5);
+//            sub.Modified.ShouldBe(5);
+//
+//            sub.ReturnMethod(3).ShouldBe(8);
+//            sub.Modified.ShouldBe(8);
+//
+//            sub.ReturnMethod(Arg.Is(4)).Returns(10);
+//            sub.ReturnMethod(4).ShouldBe(10);
+//            sub.Modified.ShouldBe(8);
+//        }
     }
 }
