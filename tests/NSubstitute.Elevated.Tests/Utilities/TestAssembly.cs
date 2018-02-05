@@ -1,6 +1,7 @@
 using System;
 using System.CodeDom.Compiler;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -45,7 +46,8 @@ namespace NSubstitute.Elevated.Tests.Utilities
 
             m_TestAssemblyPath = compilerResult.PathToAssembly;
 
-            PeVerify.Verify(m_TestAssemblyPath); // pre-check..sometimes we can compile code that doesn't verify
+            //PeVerify.Verify(m_TestAssemblyPath); // pre-check..sometimes we can compile code that doesn't verify
+            Verify(m_TestAssemblyPath);
 
             var results = ElevatedWeaver.PatchAllDependentAssemblies(m_TestAssemblyPath, PatchTestAssembly.Yes);
             results.Count.ShouldBe(2);
@@ -55,7 +57,41 @@ namespace NSubstitute.Elevated.Tests.Utilities
             m_TestAssembly = AssemblyDefinition.ReadAssembly(m_TestAssemblyPath);
             MockInjector.IsPatched(m_TestAssembly).ShouldBeTrue();
 
-            PeVerify.Verify(m_TestAssemblyPath);
+            //PeVerify.Verify(m_TestAssemblyPath);
+            Verify(m_TestAssemblyPath);
+        }
+
+        // TODO: Fix
+        const string peVerifyLocation = @"C:\Program Files (x86)\Microsoft SDKs\Windows\v10.0A\bin\NETFX 4.6.1 Tools\x64\PEVerify.exe";
+        static void Verify(string assemblyName)
+        {
+            var p = new Process
+            {
+                StartInfo =
+                {
+                    Arguments = $"/nologo \"{assemblyName}\"",
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    FileName = peVerifyLocation,
+                    RedirectStandardError = true,
+                    RedirectStandardOutput = true
+                }
+            };
+
+            var error = "";
+            var output = "";
+
+            p.OutputDataReceived += (_, e) => output += $"{e.Data}\n";
+            p.ErrorDataReceived += (_, e) => error += $"{e.Data}\n";
+
+            p.Start();
+            p.BeginOutputReadLine();
+            p.BeginErrorReadLine();
+
+            p.WaitForExit();
+
+            Console.WriteLine(assemblyName);
+            p.ExitCode.ShouldBe(0, () => $"{error}\n{output}");
         }
 
         public void Dispose()
