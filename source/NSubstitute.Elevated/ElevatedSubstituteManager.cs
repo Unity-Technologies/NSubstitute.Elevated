@@ -118,7 +118,7 @@ namespace NSubstitute.Elevated
                 if (substituteConfig == SubstituteConfig.OverrideAllCalls)
                 {
                     // overriding all calls includes the ctor, so it makes no sense for the user to pass in ctor args
-                    if (constructorArguments.Any())
+                    if (constructorArguments != null && constructorArguments.Any())
                         throw new SubstituteException("Do not pass ctor args when substituting with elevated mocks (or did you mean to use ForPartsOf?)");
 
                     // but we use a ctor arg to select the special empty ctor that we patched in

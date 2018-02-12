@@ -49,7 +49,7 @@ namespace NSubstitute.Elevated.Tests.Utilities
             //PeVerify.Verify(m_TestAssemblyPath); // pre-check..sometimes we can compile code that doesn't verify
             Verify(m_TestAssemblyPath);
 
-            var results = ElevatedWeaver.PatchAllDependentAssemblies(m_TestAssemblyPath, PatchTestAssembly.Yes);
+            var results = ElevatedWeaver.PatchAllDependentAssemblies(m_TestAssemblyPath, PatchTestAssembly.Yes, new [] { new FileInfo(m_TestAssemblyPath).Name.Replace(".dll", string.Empty) });
             results.Count.ShouldBe(2);
             results.ShouldContain(new PatchResult("mscorlib", null, PatchState.IgnoredOutsideAllowedPaths));
             results.ShouldContain(new PatchResult(m_TestAssemblyPath, ElevatedWeaver.GetPatchBackupPathFor(m_TestAssemblyPath), PatchState.Patched));

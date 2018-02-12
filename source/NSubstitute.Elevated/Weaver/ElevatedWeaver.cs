@@ -89,7 +89,7 @@ namespace NSubstitute.Elevated.Weaver
                             File.Replace(tmpPath, assemblyToPatchPath, originalPath);
                             // $$$ TODO: move pdb file too
 
-                            patchResult = new PatchResult(tmpPath, assemblyToPatchPath, PatchState.Patched);
+                            patchResult = new PatchResult(assemblyToPatchPath, originalPath, PatchState.Patched);
                         }
                         else
                         { // TODO: Nope
