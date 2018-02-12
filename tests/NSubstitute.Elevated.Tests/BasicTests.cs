@@ -1,9 +1,11 @@
 using System;
+using System.Collections.Generic;
 using SystemUnderTest;
 using NSubstitute.Elevated.WeaverInternals;
 using NSubstitute.Exceptions;
 using NUnit.Framework;
 using Shouldly;
+using Unity.Core;
 
 namespace NSubstitute.Elevated.Tests
 {
@@ -15,7 +17,7 @@ namespace NSubstitute.Elevated.Tests
         [OneTimeSetUp]
         public void Setup()
         {
-            m_Dispose = ElevatedSubstitutionContext.AutoHook();
+            m_Dispose = ElevatedSubstitutionContext.AutoHook(typeof(BasicTests).Assembly.Location, new [] {"SystemUnderTest"});
 //            PatchedAssemblyBridgeX.TryMock = PatchedAssemblyBridge.TryMock;
         }
 

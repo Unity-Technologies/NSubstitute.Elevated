@@ -108,7 +108,7 @@ namespace NSubstitute.Elevated.Weaver
                 void AddField(string fieldName, FieldAttributes fieldAttributes)
                 {
                     type.Fields.Add(new FieldDefinition(fieldName,
-                            FieldAttributes.Private | FieldAttributes.NotSerialized | fieldAttributes,
+                            FieldAttributes.Private | fieldAttributes,
                             type.Module.TypeSystem.Object));
                 }
 

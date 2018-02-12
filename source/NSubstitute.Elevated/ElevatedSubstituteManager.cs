@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.Remoting;
 using Mono.Cecil;
 using Mono.Cecil.Cil;
 using NSubstitute.Core;
@@ -85,8 +86,8 @@ namespace NSubstitute.Elevated
             //  * have a note about static ctors. because they are special, and do not support disposal, can't really mock them right.
             //    best for user to do mock/unmock of static ctors manually (i.e. move into StaticInit/StaticDispose and call directly from test code)
 
-            var patchAllDependentAssemblies = ElevatedWeaver.PatchAllDependentAssemblies(Assembly.GetAssembly(typeToProxy).Location, PatchTestAssembly.Yes).ToList();
-            Verify(patchAllDependentAssemblies[1].Path);
+            //var patchAllDependentAssemblies = ElevatedWeaver.PatchAllDependentAssemblies(Assembly.GetAssembly(typeToProxy).Location, PatchTestAssembly.Yes).ToList();
+            //Verify(patchAllDependentAssemblies[1].Path);
 
             object proxy;
             var substituteConfig = ElevatedSubstitutionContext.TryGetSubstituteConfig(callRouter);
@@ -124,12 +125,13 @@ namespace NSubstitute.Elevated
                     constructorArguments = k_MockedCtorParams;
                 }
 
-                proxy = Activator.CreateInstanceFrom(patchAllDependentAssemblies[1].Path, typeToProxy.FullName, false,
-                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.CreateInstance, null,
-                    constructorArguments, null, null);
+//                var proxyWrap = Activator.CreateInstanceFrom(patchAllDependentAssemblies[1].Path, typeToProxy.FullName, false,
+//                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.CreateInstance, null,
+//                    constructorArguments, null, null);
+//                proxy = proxyWrap.Unwrap();
 
-                //proxy = Activator.CreateInstance(typeToProxy, constructorArguments);
-                GetRouterField(typeToProxy).SetValue(proxy, callRouter);
+                proxy = Activator.CreateInstance(typeToProxy, constructorArguments);
+                GetRouterField(proxy.GetType()).SetValue(proxy, callRouter);
             }
 
             return proxy;
