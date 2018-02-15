@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 using JetBrains.Annotations;
 
 namespace Unity.Core
@@ -60,5 +61,40 @@ namespace Unity.Core
         [NotNull]
         public static string StringJoin<T, TSelected>([NotNull] this IEnumerable<T> @this, [NotNull] Func<T, TSelected> selector, char separator)
         => string.Join(new string(separator, 1), @this.Select(selector));
+
+        [NotNull]
+        public static string ExpandTabs([NotNull] this string @this, int tabWidth, StringBuilder buffer = null)
+        {
+            if (tabWidth < 0)
+                throw new ArgumentException("tabWidth must be >= 0", nameof(tabWidth));
+
+            var tabCount = @this.Count(c => c == '\t');
+
+            // early out if nothing to do
+            if (tabCount == 0)
+                return @this;
+
+            // more early-out and a bit silly scenarios, but why not..
+            if (tabWidth == 0)
+                return @this.Replace("\t", "");
+            if (tabWidth == 1)
+                return @this.Replace('\t', ' ');
+
+            var capacity = @this.Length + tabCount * (tabWidth - 1);
+            if (buffer != null)
+                buffer.EnsureCapacity(capacity);
+            else
+                buffer = new StringBuilder(capacity);
+
+            foreach (var c in @this)
+            {
+                if (c != '\t')
+                    buffer.Append(c);
+                else
+                    buffer.Append(' ', tabWidth - buffer.Length % tabWidth);
+            }
+
+            return buffer.ToString();
+        }
     }
 }

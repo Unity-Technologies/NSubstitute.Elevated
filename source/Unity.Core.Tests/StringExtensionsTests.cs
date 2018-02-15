@@ -136,5 +136,35 @@ namespace Unity.Core.Tests
             enumerable.StringJoin(Selector, " ** ").ShouldBe("String ** Int32 ** (null) ** ValueTuple`2");
             enumerable.StringJoin(Selector, '?').ShouldBe("String?Int32?(null)?ValueTuple`2");
         }
+
+        [Test]
+        public void ExpandTabs_WithEmpty_Returns_Empty()
+        {
+            "".ExpandTabs(4).ShouldBeEmpty();
+        }
+
+        [Test]
+        public void ExpandTabs_WithNoTabs_Returns_IdenticalString() // i.e. no allocs
+        {
+            const string text = "abc def ghijkl";
+            ReferenceEquals(text, text.ExpandTabs(4)).ShouldBeTrue();
+        }
+
+        [Test]
+        public void ExpandTabs_WithInvalidTabWidth_Throws()
+        {
+            Should.Throw<ArgumentException>(() => "".ExpandTabs(-123));
+            Should.Throw<ArgumentException>(() => "abc".ExpandTabs(-1));
+        }
+
+        [Test]
+        public void ExpandTabs_BasicScenarios_ExpandsProperly()
+        {
+            "a\tbc\t\td".ExpandTabs(4).ShouldBe("a   bc      d");
+            "a\tbc\t\td".ExpandTabs(3).ShouldBe("a  bc    d");
+            "a\tbc\t\td".ExpandTabs(2).ShouldBe("a bc    d");
+            "a\tbc\t\td".ExpandTabs(1).ShouldBe("a bc  d");
+            "a\tbc\t\td".ExpandTabs(0).ShouldBe("abcd");
+        }
     }
 }
