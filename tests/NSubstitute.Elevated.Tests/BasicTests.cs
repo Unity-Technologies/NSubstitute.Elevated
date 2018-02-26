@@ -1,11 +1,8 @@
 using System;
-using System.Collections.Generic;
 using SystemUnderTest;
-using NSubstitute.Elevated.WeaverInternals;
 using NSubstitute.Exceptions;
 using NUnit.Framework;
 using Shouldly;
-using Unity.Core;
 
 namespace NSubstitute.Elevated.Tests
 {
@@ -18,7 +15,6 @@ namespace NSubstitute.Elevated.Tests
         public void Setup()
         {
             m_Dispose = ElevatedSubstitutionContext.AutoHook(typeof(BasicTests).Assembly.Location, new [] {"SystemUnderTest"});
-//            PatchedAssemblyBridgeX.TryMock = PatchedAssemblyBridge.TryMock;
         }
 
         [OneTimeTearDown]
@@ -45,7 +41,7 @@ namespace NSubstitute.Elevated.Tests
         {
             var sub = Substitute.ForPartsOf<ClassWithVirtuals>();
 
-            sub.GetType().FullName.ShouldBe("SystemUnderTest.ClassWithVirtuals");
+            sub.GetType().FullName.ShouldBe("Castle.Proxies.ClassWithVirtualsProxy");
             sub.GetValue().ShouldBe(4);
 
             sub.GetValue().Returns(6);
@@ -60,6 +56,16 @@ namespace NSubstitute.Elevated.Tests
 
             sub.ShouldBeOfType<ClassWithDefaultCtor>();
             sub.Value.ShouldBe(0);
+        }
+
+        [Test]
+        public void ClassWithDefaultCtor_MockedMethod_ReturnsOverriddenValue()
+        {
+            var sub = Substitute.For<ClassWithDefaultCtor>();
+
+            sub.Value.Returns(24);
+
+            sub.Value.ShouldBe(24);
         }
 
         [Test]
@@ -137,37 +143,37 @@ namespace NSubstitute.Elevated.Tests
 
             // $$$ TODO: test that the type is itself patched (look for __mockthingy)
         }
-//
-//        [Test]
-//        public void SimpleClass_FullMock_DoesNotCallDefaultImpls()
-//        {
-//            var sub = Substitute.For<SimpleClass>();
-//
-//            sub.VoidMethod(5);
-//            sub.Modified.ShouldBe(0);
-//
-//            sub.ReturnMethod(5).ShouldBe(0);
-//            sub.Modified.ShouldBe(0);
-//
-//            sub.ReturnMethod(5).Returns(10);
-//            sub.ReturnMethod(5).ShouldBe(10);
-//            sub.Modified.ShouldBe(0);
-//        }
-//
-//        [Test]
-//        public void SimpleClass_PartialMock_CallsDefaultImpls()
-//        {
-//            var sub = Substitute.ForPartsOf<SimpleClass>();
-//
-//            sub.VoidMethod(5);
-//            sub.Modified.ShouldBe(5);
-//
-//            sub.ReturnMethod(3).ShouldBe(8);
-//            sub.Modified.ShouldBe(8);
-//
-//            sub.ReturnMethod(Arg.Is(4)).Returns(10);
-//            sub.ReturnMethod(4).ShouldBe(10);
-//            sub.Modified.ShouldBe(8);
-//        }
+
+        [Test]
+        public void SimpleClass_FullMock_DoesNotCallDefaultImpls()
+        {
+            var sub = Substitute.For<SimpleClass>();
+
+            sub.VoidMethod(5);
+            sub.Modified.ShouldBe(0);
+
+            sub.ReturnMethod(5).ShouldBe(0);
+            sub.Modified.ShouldBe(0);
+
+            sub.ReturnMethod(5).Returns(10);
+            sub.ReturnMethod(5).ShouldBe(10);
+            sub.Modified.ShouldBe(0);
+        }
+
+        [Test]
+        public void SimpleClass_PartialMock_CallsDefaultImpls()
+        {
+            var sub = Substitute.ForPartsOf<SimpleClass>();
+
+            sub.VoidMethod(5);
+            sub.Modified.ShouldBe(5);
+
+            sub.ReturnMethod(3).ShouldBe(8);
+            sub.Modified.ShouldBe(8);
+
+            sub.ReturnMethod(4).Returns(10);
+            sub.ReturnMethod(4).ShouldBe(10);
+            sub.Modified.ShouldBe(8);
+        }
     }
 }

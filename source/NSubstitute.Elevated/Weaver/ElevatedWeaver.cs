@@ -6,6 +6,7 @@ using System.Linq;
 using System.Reflection;
 using JetBrains.Annotations;
 using Mono.Cecil;
+using Shouldly;
 using Unity.Core;
 
 namespace NSubstitute.Elevated.Weaver
@@ -82,11 +83,11 @@ namespace NSubstitute.Elevated.Weaver
                             var tmpPath = assemblyToPatchPath.Split(new[] {".dll"}, StringSplitOptions.None)[0] +
                                           ".tmp";
                             File.Delete(tmpPath);
-                            assemblyToPatch
-                                .Write(tmpPath); //$$$$, new WriterParameters { WriteSymbols = true });  // getting exception, haven't looked into it yet
+                            assemblyToPatch.Write(tmpPath); //$$$$, new WriterParameters { WriteSymbols = true });  // getting exception, haven't looked into it yet
                             assemblyToPatch.Dispose();
                             var originalPath = GetPatchBackupPathFor(assemblyToPatchPath);
                             File.Replace(tmpPath, assemblyToPatchPath, originalPath);
+                            Verify(assemblyToPatchPath);
                             // $$$ TODO: move pdb file too
 
                             patchResult = new PatchResult(assemblyToPatchPath, originalPath, PatchState.Patched);
@@ -102,6 +103,39 @@ namespace NSubstitute.Elevated.Weaver
 
                 return patchResults.Values;
             }
+        }
+
+        // TODO: Fix
+        const string peVerifyLocation = @"C:\Program Files (x86)\Microsoft SDKs\Windows\v10.0A\bin\NETFX 4.6.1 Tools\x64\PEVerify.exe";
+        static void Verify(string assemblyName)
+        {
+            var p = new Process
+            {
+                StartInfo =
+                {
+                    Arguments = $"/nologo \"{assemblyName}\"",
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    FileName = peVerifyLocation,
+                    RedirectStandardError = true,
+                    RedirectStandardOutput = true
+                }
+            };
+
+            var error = "";
+            var output = "";
+
+            p.OutputDataReceived += (_, e) => output += $"{e.Data}\n";
+            p.ErrorDataReceived += (_, e) => error += $"{e.Data}\n";
+
+            p.Start();
+            p.BeginOutputReadLine();
+            p.BeginErrorReadLine();
+
+            p.WaitForExit();
+
+            Console.WriteLine(assemblyName);
+            p.ExitCode.ShouldBe(0, () => $"{error}\n{output}");
         }
 
         public static IReadOnlyCollection<PatchResult> PatchAssemblies(

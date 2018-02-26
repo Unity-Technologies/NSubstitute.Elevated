@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Security.Policy;
@@ -52,7 +53,7 @@ namespace NSubstitute.Elevated.Weaver
                 .ToList();                                  // copy to a list in case patch work we do would invalidate the enumerator
 
             foreach (var type in typesToProcess)
-                Patch(type);
+                Patch(type, assembly);
 
             // add an attr to mark the assembly as patched
 
@@ -87,7 +88,7 @@ namespace NSubstitute.Elevated.Weaver
                 return IsPatched(assembly);
         }
 
-        void Patch(TypeDefinition type)
+        void Patch(TypeDefinition type, AssemblyDefinition assembly)
         {
             if (type.IsInterface)
                 return;
@@ -103,7 +104,7 @@ namespace NSubstitute.Elevated.Weaver
             try
             {
                 foreach (var method in type.Methods)
-                    Patch(method);
+                    Patch(method, assembly);
 
                 void AddField(string fieldName, FieldAttributes fieldAttributes)
                 {
@@ -176,12 +177,71 @@ namespace NSubstitute.Elevated.Weaver
             type.Methods.Add(ctor);
         }
 
-        void Patch(MethodDefinition method)
+        void Patch(MethodDefinition method, AssemblyDefinition assembly)
         {
             if (method.IsCompilerControlled || method.IsConstructor || method.IsAbstract)
                 return;
 
-            // $$$ DOWIT
+            method.Body.InitLocals = true;
+            var originalType = assembly.MainModule.ImportReference(Type.GetType("System.Type"));
+            var getTypeFromHandle = assembly.MainModule.ImportReference(originalType.Resolve().Methods.Single(m => m.Name == "GetTypeFromHandle"));
+            //var getTypeFromHandle = assembly.MainModule.Import(new MethodReference("GetTypeFromHandle", type, type) { Parameters = { new ParameterDefinition(runtimeTypeHandle) } });
+            var emptyTypes = assembly.MainModule.ImportReference(originalType.Resolve().Fields.Single(f => f.Name == "EmptyTypes"));
+
+            var v1 = new VariableDefinition(assembly.MainModule.TypeSystem.Object);
+            method.Body.Variables.Add(v1);
+            var bodyInstructions = new List<Instruction>(method.Body.Instructions);
+            method.Body.Instructions.Clear();
+            method.Body.Instructions.Add(Instruction.Create(OpCodes.Ldtoken, method.DeclaringType));
+            method.Body.Instructions.Add(Instruction.Create(OpCodes.Call, getTypeFromHandle));
+            method.Body.Instructions.Add(Instruction.Create(OpCodes.Ldarg_0));
+            method.Body.Instructions.Add(Instruction.Create(OpCodes.Ldtoken, method.ReturnType));
+            method.Body.Instructions.Add(Instruction.Create(OpCodes.Call, getTypeFromHandle));
+            method.Body.Instructions.Add(Instruction.Create(OpCodes.Ldloca_S, v1));
+            method.Body.Instructions.Add(Instruction.Create(OpCodes.Ldsfld, emptyTypes));
+
+            // TODO: Parameter specific
+            if (method.Parameters.Count > 0)
+            {
+                method.Body.Instructions.Add(Instruction.Create(OpCodes.Ldc_I4_1));
+                method.Body.Instructions.Add(Instruction.Create(OpCodes.Newarr, assembly.MainModule.TypeSystem.Object));
+                method.Body.Instructions.Add(Instruction.Create(OpCodes.Dup));
+                method.Body.Instructions.Add(Instruction.Create(OpCodes.Ldc_I4_0));
+                method.Body.Instructions.Add(Instruction.Create(OpCodes.Ldarg_1)); // arg
+                method.Body.Instructions.Add(Instruction.Create(OpCodes.Box, method.Parameters[0].ParameterType));
+                method.Body.Instructions.Add(Instruction.Create(OpCodes.Stelem_Ref));
+            }
+            else
+            {
+                method.Body.Instructions.Add(Instruction.Create(OpCodes.Ldc_I4_0));
+                method.Body.Instructions.Add(Instruction.Create(OpCodes.Newarr, assembly.MainModule.TypeSystem.Object));
+            }
+
+            // End of parameter include
+            method.Body.Instructions.Add(Instruction.Create(OpCodes.Call, assembly.MainModule.ImportReference(m_PatchedAssemblyBridgeTryMock)));
+            method.Body.Instructions.Add(Instruction.Create(OpCodes.Nop));
+
+            var count = method.Body.Instructions.Count;
+
+            var hasReturnValue = method.ReturnType != assembly.MainModule.TypeSystem.Void;
+            if (hasReturnValue)
+            {
+                method.Body.Instructions.Add(Instruction.Create(OpCodes.Ldloc_S, v1));
+                method.Body.Instructions.Add(Instruction.Create(OpCodes.Unbox_Any, method.ReturnType));
+            }
+            method.Body.Instructions.Add(Instruction.Create(OpCodes.Ret));
+
+            foreach (var instruction in bodyInstructions)
+            {
+                method.Body.Instructions.Add(instruction);
+            }
+            method.Body.Instructions[count - 1] = Instruction.Create(OpCodes.Brfalse_S, method.Body.Instructions[count + (hasReturnValue ? 3 : 1)]);
+
+            /*method.Body.Instructions.Clear();
+
+
+            ConvertReturnTypeToDefault(method.ReturnType, method.Body.Instructions);
+            method.Body.Instructions.Add(Instruction.Create(OpCodes.Ret));*/
         }
     }
 }
