@@ -21,9 +21,7 @@ namespace Unity.Core
 
         [NotNull]
         public static string Left([NotNull] this string @this, int maxChars)
-        {
-            return @this.Substring(0, Math.Min(maxChars, @this.Length));
-        }
+            => @this.Substring(0, Math.Min(maxChars, @this.Length));
 
         [NotNull]
         public static string Mid([NotNull] this string @this, int offset, int maxChars = -1)
@@ -44,6 +42,15 @@ namespace Unity.Core
         {
             var safeMaxChars = Math.Min(maxChars, @this.Length);
             return @this.Substring(@this.Length - safeMaxChars, safeMaxChars);
+        }
+
+        [NotNull]
+        public static string Truncate([NotNull] this string @this, int maxChars, string trailer = "...")
+        {
+            if (@this.Length <= maxChars)
+                return @this;
+
+            return @this.Left(maxChars - trailer.Length) + trailer;
         }
 
         [NotNull]

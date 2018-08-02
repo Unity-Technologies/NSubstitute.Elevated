@@ -83,6 +83,43 @@ namespace Unity.Core.Tests
         }
 
         [Test]
+        public void Truncate_ThatDoesNotShorten_ReturnsSameInstance()
+        {
+            const string text = "abc def";
+            ReferenceEquals(text, text.Truncate(100)).ShouldBeTrue();
+            ReferenceEquals(text, text.Truncate(10)).ShouldBeTrue();
+            ReferenceEquals(text, text.Truncate(text.Length)).ShouldBeTrue();
+        }
+
+        [Test]
+        public void Truncate_ThatShortens_TruncatesAndAddsTrailer()
+        {
+            "abc def".Truncate(6).ShouldBe("abc...");
+            "abc def".Truncate(5).ShouldBe("ab...");
+            "abc def".Truncate(4).ShouldBe("a...");
+            "abc def".Truncate(3).ShouldBe("...");
+
+            "abc def".Truncate(6, "ghi").ShouldBe("abcghi");
+            "abc def".Truncate(5, "ghi").ShouldBe("abghi");
+            "abc def".Truncate(4, "ghi").ShouldBe("aghi");
+            "abc def".Truncate(3, "ghi").ShouldBe("ghi");
+        }
+
+        [Test]
+        public void Truncate_WithTooBigTrailer_ShouldThrow()
+        {
+            Should.Throw<ArgumentException>(() => "abc def".Truncate(2));
+            Should.Throw<ArgumentException>(() => "abc def".Truncate(5, "123456"));
+        }
+
+        [Test]
+        public void Truncate_WithUnderflow_ShouldThrow()
+        {
+            Should.Throw<ArgumentException>(() => "abc def".Truncate(-2));
+            Should.Throw<ArgumentException>(() => "abc def".Truncate(0, "ghi"));
+        }
+
+        [Test]
         public void StringJoin_WithEmpty_ReturnsEmptyString()
         {
             var enumerable = new object[0];
@@ -144,7 +181,7 @@ namespace Unity.Core.Tests
         }
 
         [Test]
-        public void ExpandTabs_WithNoTabs_Returns_IdenticalString() // i.e. no allocs
+        public void ExpandTabs_WithNoTabs_ReturnsSameInstance() // i.e. no allocs
         {
             const string text = "abc def ghijkl";
             ReferenceEquals(text, text.ExpandTabs(4)).ShouldBeTrue();

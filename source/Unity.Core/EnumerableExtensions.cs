@@ -43,5 +43,8 @@ namespace Unity.Core
 
         public static bool IsNullOrEmpty<T>([CanBeNull] this IEnumerable<T> @this)
         => @this == null || !@this.Any();
+
+        public static IEnumerable<T> SelectMany<T>([NotNull] this IEnumerable<IEnumerable<T>> @this)
+        => @this.SelectMany(_ => _);
     }
 }

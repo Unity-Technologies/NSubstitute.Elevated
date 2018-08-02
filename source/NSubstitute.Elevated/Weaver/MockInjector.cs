@@ -175,7 +175,6 @@ namespace NSubstitute.Elevated.Weaver
 
             type.Methods.Add(ctor);
         }
-
         void Patch(MethodDefinition method)
         {
             if (method.IsCompilerControlled || method.IsConstructor || method.IsAbstract)
