@@ -1,8 +1,11 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using System.Reflection;
 using JetBrains.Annotations;
 using NSubstitute.Core;
 using NSubstitute.Core.Arguments;
+using NSubstitute.Elevated.Weaver;
 using NSubstitute.Exceptions;
 using NSubstitute.Routing;
 using Unity.Core;
@@ -28,11 +31,13 @@ namespace NSubstitute.Elevated
                     new ElevatedCallRouterFactory(), ElevatedSubstituteManager, new CallRouterResolver());
         }
 
-        public static IDisposable AutoHook()
+        public static IDisposable AutoHook(string assemblyLocation, IEnumerable<string> assemblyPath = null)
         {
             var hookedContext = SubstitutionContext.Current;
             var thisContext = new ElevatedSubstitutionContext(hookedContext);
             SubstitutionContext.Current = thisContext;
+
+            var patchAllDependentAssemblies = ElevatedWeaver.PatchAllDependentAssemblies(assemblyLocation, PatchTestAssembly.Yes, assemblyPath).ToList();
 
             return new DelegateDisposable(() =>
                 {

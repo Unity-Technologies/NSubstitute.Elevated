@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using Mono.Cecil;
 using NSubstitute.Core;
 using NSubstitute.Elevated.WeaverInternals;
 using NSubstitute.Exceptions;
@@ -9,6 +10,7 @@ using NSubstitute.Proxies;
 using NSubstitute.Proxies.CastleDynamicProxy;
 using NSubstitute.Proxies.DelegateProxy;
 using Unity.Core;
+using TypeAttributes = Mono.Cecil.TypeAttributes;
 
 namespace NSubstitute.Elevated
 {
@@ -21,6 +23,15 @@ namespace NSubstitute.Elevated
         public ElevatedSubstituteManager(ISubstitutionContext substitutionContext)
         {
             m_CallFactory = new CallFactory(substitutionContext);
+        }
+
+        void AddMockPlaceholderToAssembly(AssemblyDefinition targetAssembly)
+        {
+            var mockPlaceholder = new TypeDefinition("NSubstitute.Elevated.WeaverInternals", "MockPlaceholderType", TypeAttributes.Public | TypeAttributes.Class | TypeAttributes.AnsiClass | TypeAttributes.BeforeFieldInit)
+            {
+                BaseType = targetAssembly.MainModule.TypeSystem.Object
+            };
+            targetAssembly.MainModule.Types.Add(mockPlaceholder);
         }
 
         object IProxyFactory.GenerateProxy(ICallRouter callRouter, Type typeToProxy, Type[] additionalInterfaces, object[] constructorArguments)
@@ -58,18 +69,32 @@ namespace NSubstitute.Elevated
                 if (additionalInterfaces.Any())
                     throw new SubstituteException("Cannot add interfaces at runtime to patched types");
 
-                if (substituteConfig == SubstituteConfig.OverrideAllCalls)
-                {
-                    // overriding all calls includes the ctor, so it makes no sense for the user to pass in ctor args
-                    if (constructorArguments.Any())
-                        throw new SubstituteException("Do not pass ctor args when substituting with elevated mocks (or did you mean to use ForPartsOf?)");
+                switch (substituteConfig) {
+                    case SubstituteConfig.OverrideAllCalls:
 
-                    // but we use a ctor arg to select the special empty ctor that we patched in
-                    constructorArguments = k_MockedCtorParams;
+                        // overriding all calls includes the ctor, so it makes no sense for the user to pass in ctor args
+                        if (constructorArguments != null && constructorArguments.Any())
+                            throw new SubstituteException("Do not pass ctor args when substituting with elevated mocks (or did you mean to use ForPartsOf?)");
+
+                        // but we use a ctor arg to select the special empty ctor that we patched in
+                        constructorArguments = k_MockedCtorParams;
+                        break;
+                    case SubstituteConfig.CallBaseByDefault:
+                        var castleDynamicProxyFactory = new CastleDynamicProxyFactory();
+                        return castleDynamicProxyFactory.GenerateProxy(callRouter, typeToProxy, additionalInterfaces, constructorArguments);
+                    case null:
+                        break;
+                    default:
+                        throw new ArgumentOutOfRangeException();
                 }
 
+//                var proxyWrap = Activator.CreateInstanceFrom(patchAllDependentAssemblies[1].Path, typeToProxy.FullName, false,
+//                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.CreateInstance, null,
+//                    constructorArguments, null, null);
+//                proxy = proxyWrap.Unwrap();
+
                 proxy = Activator.CreateInstance(typeToProxy, constructorArguments);
-                GetRouterField(typeToProxy).SetValue(proxy, callRouter);
+                GetRouterField(proxy.GetType()).SetValue(proxy, callRouter);
             }
 
             return proxy;

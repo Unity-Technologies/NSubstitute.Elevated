@@ -1,11 +1,8 @@
-<Project Sdk="Microsoft.NET.Sdk">
-
+﻿<Project Sdk="Microsoft.NET.Sdk">
   <Import Project="../common.targets" />
-
   <PropertyGroup>
     <TargetFramework>net461</TargetFramework>
   </PropertyGroup>
-
   <ItemGroup>
     <PackageReference Include="JetBrains.Annotations">
       <Version>11.1.0</Version>
@@ -16,10 +13,9 @@
     <PackageReference Include="Mono.Cecil">
       <Version>0.10.0-beta6</Version>
     </PackageReference>
+    <PackageReference Include="Shouldly" Version="3.0.0" />
   </ItemGroup>
-
   <ItemGroup>
     <ProjectReference Include="..\Unity.Core\Unity.Core.csproj" />
   </ItemGroup>
-
 </Project>

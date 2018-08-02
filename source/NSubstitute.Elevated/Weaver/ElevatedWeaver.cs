@@ -6,6 +6,7 @@ using System.Linq;
 using System.Reflection;
 using JetBrains.Annotations;
 using Mono.Cecil;
+using Shouldly;
 using Unity.Core;
 
 namespace NSubstitute.Elevated.Weaver
@@ -19,9 +20,8 @@ namespace NSubstitute.Elevated.Weaver
         public static string GetPatchBackupPathFor(string path)
         => path + k_PatchBackupExtension;
 
-        public static IReadOnlyCollection<PatchResult> PatchAllDependentAssemblies(
-            [NotNull] string testAssemblyPath,
-            PatchTestAssembly patchTestAssembly = PatchTestAssembly.No) // typically we don't want to patch the test assembly itself, only the systems under test
+        public static IReadOnlyCollection<PatchResult> PatchAllDependentAssemblies([NotNull] string testAssemblyPath,
+            PatchTestAssembly patchTestAssembly = PatchTestAssembly.No, IEnumerable<string> assemblyPath = null) // typically we don't want to patch the test assembly itself, only the systems under test
         {
             var testAssemblyFolder = Path.GetDirectoryName(testAssemblyPath);
             if (testAssemblyFolder.IsNullOrEmpty())
@@ -75,20 +75,26 @@ namespace NSubstitute.Elevated.Weaver
                             patchResult = new PatchResult(assemblyToPatchPath, null, PatchState.IgnoredTestAssembly);
                         else if (MockInjector.IsPatched(assemblyToPatch))
                             patchResult = new PatchResult(assemblyToPatchPath, null, PatchState.AlreadyPatched);
-                        else
+                        else if (assemblyPath.Contains(assemblyToPatch.Name.Name))
                         {
                             mockInjector.Patch(assemblyToPatch);
 
                             // atomic write of file with backup
-                            var tmpPath = assemblyToPatchPath + ".tmp";
+                            var tmpPath = assemblyToPatchPath.Split(new[] {".dll"}, StringSplitOptions.None)[0] +
+                                          ".tmp";
                             File.Delete(tmpPath);
-                            assemblyToPatch.Write(tmpPath);//$$$$, new WriterParameters { WriteSymbols = true });  // getting exception, haven't looked into it yet
+                            assemblyToPatch.Write(tmpPath); //$$$$, new WriterParameters { WriteSymbols = true });  // getting exception, haven't looked into it yet
                             assemblyToPatch.Dispose();
                             var originalPath = GetPatchBackupPathFor(assemblyToPatchPath);
                             File.Replace(tmpPath, assemblyToPatchPath, originalPath);
+                            Verify(assemblyToPatchPath);
                             // $$$ TODO: move pdb file too
 
                             patchResult = new PatchResult(assemblyToPatchPath, originalPath, PatchState.Patched);
+                        }
+                        else
+                        { // TODO: Nope
+                            patchResult = default(PatchResult);
                         }
 
                         patchResults.Add(assemblyToPatchPath, patchResult);
@@ -96,6 +102,83 @@ namespace NSubstitute.Elevated.Weaver
                 }
 
                 return patchResults.Values;
+            }
+        }
+
+        // TODO: Fix
+        const string peVerifyLocation = @"C:\Program Files (x86)\Microsoft SDKs\Windows\v10.0A\bin\NETFX 4.6.1 Tools\x64\PEVerify.exe";
+        static void Verify(string assemblyName)
+        {
+            var p = new Process
+            {
+                StartInfo =
+                {
+                    Arguments = $"/nologo \"{assemblyName}\"",
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    FileName = peVerifyLocation,
+                    RedirectStandardError = true,
+                    RedirectStandardOutput = true
+                }
+            };
+
+            var error = "";
+            var output = "";
+
+            p.OutputDataReceived += (_, e) => output += $"{e.Data}\n";
+            p.ErrorDataReceived += (_, e) => error += $"{e.Data}\n";
+
+            p.Start();
+            p.BeginOutputReadLine();
+            p.BeginErrorReadLine();
+
+            p.WaitForExit();
+
+            Console.WriteLine(assemblyName);
+            p.ExitCode.ShouldBe(0, () => $"{error}\n{output}");
+        }
+
+        public static IReadOnlyCollection<PatchResult> PatchAssemblies(
+            [NotNull] List<string> testAssemblyPaths)
+        {
+            var testAssemblyPath = testAssemblyPaths[0];
+            var testAssemblyFolder = Path.GetDirectoryName(testAssemblyPath);
+            if (testAssemblyFolder.IsNullOrEmpty())
+                throw new Exception("Unable to find folder for test assembly");
+            testAssemblyFolder = Path.GetFullPath(testAssemblyFolder);
+
+            // scope
+            {
+                var thisAssemblyFolder = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
+                if (thisAssemblyFolder.IsNullOrEmpty())
+                    throw new Exception("Can only patch assemblies on disk");
+                thisAssemblyFolder = Path.GetFullPath(thisAssemblyFolder);
+
+                // keep things really simple, at least for now
+                if (string.Compare(testAssemblyFolder, thisAssemblyFolder, StringComparison.OrdinalIgnoreCase) != 0)
+                    throw new Exception("All assemblies must be in the same folder");
+            }
+
+            var nsubElevatedPath = Path.Combine(testAssemblyFolder, "NSubstitute.Elevated.dll");
+            using (var nsubElevatedAssembly = AssemblyDefinition.ReadAssembly(nsubElevatedPath))
+            {
+                var mockInjector = new MockInjector(nsubElevatedAssembly);
+
+                foreach (var assemblyPath in testAssemblyPaths)
+                {
+                    var assemblyDefinition = AssemblyDefinition.ReadAssembly(assemblyPath);
+                    mockInjector.Patch(assemblyDefinition);
+                    // atomic write of file with backup
+                    var tmpPath = assemblyPath.Split(new[] { ".dll" }, StringSplitOptions.None)[0] + ".tmp";
+                    File.Delete(tmpPath);
+                    assemblyDefinition.Write(tmpPath);//$$$$, new WriterParameters { WriteSymbols = true });  // getting exception, haven't looked into it yet
+                    assemblyDefinition.Dispose();
+                    /*var originalPath = GetPatchBackupPathFor(assemblyToPatchPath);
+                    File.Replace(tmpPath, assemblyToPatchPath, originalPath);*/
+                    // $$$ TODO: move pdb file too
+                }
+
+                return null;
             }
         }
     }

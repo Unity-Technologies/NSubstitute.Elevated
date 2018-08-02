@@ -1,6 +1,6 @@
 using System;
 using System.Diagnostics;
-using Microsoft.Build.Utilities;
+using Shouldly;
 
 namespace NSubstitute.Elevated.Tests.Utilities
 {
@@ -24,29 +24,37 @@ namespace NSubstitute.Elevated.Tests.Utilities
 
     public static class PeVerify
     {
-        public static void Verify(string assemblyToTestPath)
+        // TODO: Fix
+        const string k_PeVerifyLocation = @"C:\Program Files (x86)\Microsoft SDKs\Windows\v10.0A\bin\NETFX 4.6.1 Tools\x64\PEVerify.exe";
+        public static void Verify(string assemblyName)
         {
-            var peVerifyPath = ToolLocationHelper.GetPathToDotNetFrameworkSdkFile("peverify.exe", TargetDotNetFrameworkVersion.Version45);
-
-            var psi = new ProcessStartInfo(peVerifyPath, $"/nologo \"{assemblyToTestPath}\"")
+            var p = new Process
             {
-                WindowStyle = ProcessWindowStyle.Hidden,
-                RedirectStandardOutput = true,
-                UseShellExecute = false
+                StartInfo =
+                {
+                    Arguments = $"/nologo \"{assemblyName}\"",
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    FileName = k_PeVerifyLocation,
+                    RedirectStandardError = true,
+                    RedirectStandardOutput = true
+                }
             };
 
-            using (var process = Process.Start(psi))
-            {
-                if (process != null)
-                {
-                    process.WaitForExit();
-                    if (process.ExitCode != 0)
-                    {
-                        var stdout = process.StandardOutput.ReadToEnd(); // peverify apparently doesn't write to stderr..
-                        throw new PeVerifyException($"Failure during PEVerify of {assemblyToTestPath}", process.ExitCode, stdout);
-                    }
-                }
-            }
+            var error = "";
+            var output = "";
+
+            p.OutputDataReceived += (_, e) => output += $"{e.Data}\n";
+            p.ErrorDataReceived += (_, e) => error += $"{e.Data}\n";
+
+            p.Start();
+            p.BeginOutputReadLine();
+            p.BeginErrorReadLine();
+
+            p.WaitForExit();
+
+            Console.WriteLine(assemblyName);
+            p.ExitCode.ShouldBe(0, () => $"{error}\n{output}");
         }
     }
 }
