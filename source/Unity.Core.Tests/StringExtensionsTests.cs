@@ -1,10 +1,10 @@
 using System;
+using System.Text;
 using NUnit.Framework;
 using Shouldly;
 
 namespace Unity.Core.Tests
 {
-    [TestFixture]
     public class StringExtensionsTests
     {
         [Test]
@@ -202,6 +202,36 @@ namespace Unity.Core.Tests
             "a\tbc\t\td".ExpandTabs(2).ShouldBe("a bc    d");
             "a\tbc\t\td".ExpandTabs(1).ShouldBe("a bc  d");
             "a\tbc\t\td".ExpandTabs(0).ShouldBe("abcd");
+        }
+
+        [Test]
+        public void ExpandTabs_WithUnnecessaryBuffer_DoesNotUseBuffer()
+        {
+            var buffer = new StringBuilder { Capacity = 0 };
+
+            var expandeda = "\ta".ExpandTabs(0, buffer);
+            expandeda.ShouldBe("a");
+            buffer.Capacity.ShouldBe(0);
+
+            var expandedb = "\tb".ExpandTabs(1, buffer);
+            expandedb.ShouldBe(" b");
+            buffer.Capacity.ShouldBe(0);
+
+            var expandedc = "\tc".ExpandTabs(2, buffer);
+            expandedc.ShouldBe("  c");
+            buffer.Capacity.ShouldNotBe(0);
+        }
+
+        [Test]
+        public void ExpandTabs_WithReusedBuffer_DoesNotReusePreviousResults()
+        {
+            // this is a bugfix test. note tab width of 2 to avoid early-out that doesn't use the string builder.
+
+            var buffer = new StringBuilder();
+            "\ta".ExpandTabs(2, buffer).ShouldBe("  a");
+            buffer.Length.ShouldBe(0); // no leftovers
+            "\tb".ExpandTabs(2, buffer).ShouldBe("  b"); // not "  a b"
+            buffer.Length.ShouldBe(0);
         }
     }
 }

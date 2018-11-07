@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.Specialized;
 using System.Linq;
 using System.Text.RegularExpressions;
 using JetBrains.Annotations;
@@ -32,7 +33,7 @@ namespace Unity.Core
 
         [NotNull]
         public static IEnumerable<T> WrapInEnumerableOrEmpty<T>([CanBeNull] this T @this) where T : class
-        => !(@this is null) ? WrapInEnumerable(@this) : Enumerable.Empty<T>();
+        => ReferenceEquals(@this, null) ? Enumerable.Empty<T>() : WrapInEnumerable(@this);
     }
 
     public static class TypeExtensions
@@ -63,6 +64,36 @@ namespace Unity.Core
     {
         // if you want to speed this up, see https://stackoverflow.com/q/311165/14582
         public static string ToHexString([NotNull] this byte[] @this)
-        => BitConverter.ToString(@this).Replace("-", "");
+            => BitConverter.ToString(@this).Replace("-", "");
+    }
+
+    public static class ListExtensions
+    {
+        public static void SetRange<T>([NotNull] this List<T> @this, IEnumerable<T> collection)
+        {
+            @this.Clear();
+            @this.AddRange(collection);
+        }
+
+        public static T PopBack<T>([NotNull] this IList<T> @this)
+        {
+            var item = @this[@this.Count - 1];
+            @this.DropBack();
+            return item;
+        }
+
+        public static void DropBack<T>([NotNull] this IList<T> @this)
+        {
+            @this.RemoveAt(@this.Count - 1);
+        }
+    }
+
+    public static class StringCollectionExtensions
+    {
+        public static void AddRange([NotNull] this StringCollection @this, IEnumerable<string> collection)
+        {
+            foreach (var item in collection)
+                @this.Add(item);
+        }
     }
 }

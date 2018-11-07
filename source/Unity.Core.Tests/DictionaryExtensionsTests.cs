@@ -5,7 +5,6 @@ using Shouldly;
 
 namespace Unity.Core.Tests
 {
-    [TestFixture]
     public class DictionaryExtensionsTests
     {
         [Test]

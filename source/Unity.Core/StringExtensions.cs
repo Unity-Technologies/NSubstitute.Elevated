@@ -70,6 +70,15 @@ namespace Unity.Core
         => string.Join(new string(separator, 1), @this.Select(selector));
 
         [NotNull]
+        public static IEnumerable<string> ToLower([NotNull] this IEnumerable<string> @this)
+        => @this.Select(s => s.ToLower());
+
+        [NotNull]
+        public static IEnumerable<string> ToUpper([NotNull] this IEnumerable<string> @this)
+        => @this.Select(s => s.ToUpper());
+
+        // the buffer is for avoiding the builder alloc each time. useful when processing multiple lines, and can cut allocs by half.
+        [NotNull]
         public static string ExpandTabs([NotNull] this string @this, int tabWidth, StringBuilder buffer = null)
         {
             if (tabWidth < 0)
@@ -101,7 +110,9 @@ namespace Unity.Core
                     buffer.Append(' ', tabWidth - buffer.Length % tabWidth);
             }
 
-            return buffer.ToString();
+            var expanded = buffer.ToString();
+            buffer.Clear();
+            return expanded;
         }
     }
 }

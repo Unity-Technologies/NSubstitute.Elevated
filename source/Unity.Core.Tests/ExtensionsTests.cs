@@ -8,7 +8,6 @@ using Shouldly;
 
 namespace Unity.Core.Tests
 {
-    [TestFixture]
     public class RefTypeExtensionsTests
     {
         [Test]
@@ -40,7 +39,6 @@ namespace Unity.Core.Tests
         }
     }
 
-    [TestFixture]
     public class ComparableExtensionsTests
     {
         [Test]
