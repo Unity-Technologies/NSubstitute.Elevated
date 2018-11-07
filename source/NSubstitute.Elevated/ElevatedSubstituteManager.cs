@@ -52,7 +52,7 @@ namespace NSubstitute.Elevated
             }
             else if (typeToProxy == typeof(SubstituteStatic.Proxy))
             {
-                if (additionalInterfaces != null && additionalInterfaces.Any())
+                if (additionalInterfaces?.Any() == true)
                     throw new SubstituteException("Cannot substitute interfaces as static");
                 if (constructorArguments.Length != 1)
                     throw new SubstituteException("Unexpected use of SubstituteStatic.For");
