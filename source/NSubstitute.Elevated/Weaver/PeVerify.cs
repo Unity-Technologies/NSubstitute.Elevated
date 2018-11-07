@@ -1,26 +1,15 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using Unity.Core;
 
 namespace NSubstitute.Elevated.Weaver
 {
     public class PeVerifyException : Exception
     {
-        public PeVerifyException(string message, int exitCode, string output)
-            : base(message)
-        {
-            ExitCode = exitCode;
-            Output = output;
-        }
-
-        public int ExitCode { get; }
-        public string Output { get; }
-
-        public override string ToString()
-        {
-            return $"{Message} (exit={ExitCode})\n{Output}";
-        }
+        public PeVerifyException(string assemblyName, int exitCode, IEnumerable<string> log)
+            : base(
+                $"Failed to PEVerify assembly '{assemblyName}' (exit={exitCode})\n\n"
+                + log.StringJoin('\n')) { }
     }
 
     public static class PeVerify
@@ -34,15 +23,13 @@ namespace NSubstitute.Elevated.Weaver
 
         public static void Verify(string assemblyName)
         {
-            var stdout = new List<string>();
-            var stderr = new List<string>();
-
-            var rc = ProcessUtility.ExecuteCommandLine(ExePath, new[] { "/nologo", assemblyName }, null, stdout, stderr);
+            var log = new List<string>();
+            var rc = ProcessUtility.ExecuteCommandLine(ExePath, new[] { "/nologo", assemblyName }, null, log, log);
 
             // TODO: not great to just throw like this vs. returning an error structure
             // TODO: will it return 0 even if there are warnings?
             if (rc != 0)
-                throw new PeVerifyException($"Failed to PEVerify assembly '{assemblyName}'", rc, stderr.Concat(stdout).StringJoin('\n'));
+                throw new PeVerifyException(assemblyName, rc, log);
         }
     }
 }

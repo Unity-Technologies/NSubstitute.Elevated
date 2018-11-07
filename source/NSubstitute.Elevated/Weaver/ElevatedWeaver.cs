@@ -6,12 +6,17 @@ using System.Linq;
 using System.Reflection;
 using JetBrains.Annotations;
 using Mono.Cecil;
-using Shouldly;
+using NiceIO;
 using Unity.Core;
 
 namespace NSubstitute.Elevated.Weaver
 {
-    public enum PatchTestAssembly { No, Yes }
+    [Flags]
+    public enum PatchOptions
+    {
+        PatchTestAssembly   = 1 << 0,   // typically we don't want to patch the test assembly itself, only the systems under test
+        SkipPeVerify        = 1 << 1,   // maybe flip this bit the other way when we get a really solid weaver (peverify has an obvious perf cost)
+    }
 
     public static class ElevatedWeaver
     {
@@ -20,122 +25,112 @@ namespace NSubstitute.Elevated.Weaver
         public static string GetPatchBackupPathFor(string path)
         => path + k_PatchBackupExtension;
 
-        public static IReadOnlyCollection<PatchResult> PatchAllDependentAssemblies([NotNull] string testAssemblyPath,
-            PatchTestAssembly patchTestAssembly = PatchTestAssembly.No, IEnumerable<string> assemblyPath = null) // typically we don't want to patch the test assembly itself, only the systems under test
+        public static IReadOnlyCollection<PatchResult> PatchAllDependentAssemblies(NPath testAssemblyPath, PatchOptions patchOptions)
         {
-            var testAssemblyFolder = Path.GetDirectoryName(testAssemblyPath);
-            if (testAssemblyFolder.IsNullOrEmpty())
-                throw new Exception("Unable to find folder for test assembly");
-            testAssemblyFolder = Path.GetFullPath(testAssemblyFolder);
+            // TODO: ensure we do not have any assemblies that we want to patch already loaded
+            // (this will require the separate in-memory patching ability)
 
-            // scope
+            // this dll has types we're going to be injecting, so ensure it is in the same folder
+            //var targetWeaverDll
+
+            var toProcess = new List<NPath> { testAssemblyPath.FileMustExist() };
+            var patchResults = new Dictionary<string, PatchResult>(StringComparer.OrdinalIgnoreCase);
+            var mockInjector = new MockInjector();
+
+            EnsureMockTypesInFolder(testAssemblyPath.Parent);
+
+            for (var toProcessIndex = 0; toProcessIndex < toProcess.Count; ++toProcessIndex)
             {
-                var thisAssemblyFolder = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
-                if (thisAssemblyFolder.IsNullOrEmpty())
-                    throw new Exception("Can only patch assemblies on disk");
-                thisAssemblyFolder = Path.GetFullPath(thisAssemblyFolder);
+                var assemblyToPatchPath = toProcess[toProcessIndex];
 
-                // keep things really simple, at least for now
-                if (string.Compare(testAssemblyFolder, thisAssemblyFolder, StringComparison.OrdinalIgnoreCase) != 0)
-                    throw new Exception("All assemblies must be in the same folder");
+                // as we accumulate dependencies recursively, we will probably get some duplicates we can early-out on
+                if (patchResults.ContainsKey(assemblyToPatchPath))
+                    continue;
+
+                using (var assemblyToPatch = AssemblyDefinition.ReadAssembly(assemblyToPatchPath))
+                {
+                    GatherReferences(assemblyToPatchPath, assemblyToPatch);
+                    TryPatch(assemblyToPatchPath, assemblyToPatch);
+                }
             }
 
-            var nsubElevatedPath = Path.Combine(testAssemblyFolder, "NSubstitute.Elevated.dll");
-            using (var nsubElevatedAssembly = AssemblyDefinition.ReadAssembly(nsubElevatedPath))
+            void GatherReferences(NPath assemblyToPatchPath, AssemblyDefinition assemblyToPatch)
             {
-                var mockInjector = new MockInjector(nsubElevatedAssembly);
-                var toProcess = new List<string> { Path.GetFullPath(testAssemblyPath) };
-                var patchResults = new Dictionary<string, PatchResult>(StringComparer.OrdinalIgnoreCase);
-
-                for (var toProcessIndex = 0; toProcessIndex < toProcess.Count; ++toProcessIndex)
+                foreach (var referencedAssembly in assemblyToPatch.Modules.SelectMany(m => m.AssemblyReferences))
                 {
-                    var assemblyToPatchPath = toProcess[toProcessIndex];
-                    if (patchResults.ContainsKey(assemblyToPatchPath))
-                        continue;
+                    // only patch dll's we "own", that are in the same folder as the test assembly
+                    var referencedAssemblyPath = assemblyToPatchPath.Parent.Combine(referencedAssembly.Name + ".dll");
 
-                    if (!Path.IsPathRooted(assemblyToPatchPath))
-                        throw new Exception($"Unexpected non-rooted assembly path '{assemblyToPatchPath}'");
+                    if (referencedAssemblyPath.FileExists())
+                        toProcess.Add(referencedAssemblyPath);
+                    else if (!patchResults.ContainsKey(referencedAssembly.Name))
+                        patchResults.Add(referencedAssembly.Name, new PatchResult(referencedAssembly.Name, null, PatchState.IgnoredOutsideAllowedPaths));
+                }
+            }
 
-                    using (var assemblyToPatch = AssemblyDefinition.ReadAssembly(assemblyToPatchPath))
-                    {
-                        foreach (var referencedAssembly in assemblyToPatch.Modules.SelectMany(m => m.AssemblyReferences))
-                        {
-                            // only patch dll's we "own", that are in the same folder as the test assembly
-                            var foundPath = Path.Combine(testAssemblyFolder, referencedAssembly.Name + ".dll");
+            void TryPatch(NPath assemblyToPatchPath, AssemblyDefinition assemblyToPatch)
+            {
+                PatchResult patchResult;
 
-                            if (File.Exists(foundPath))
-                                toProcess.Add(foundPath);
-                            else if (!patchResults.ContainsKey(referencedAssembly.Name))
-                                patchResults.Add(referencedAssembly.Name, new PatchResult(referencedAssembly.Name, null, PatchState.IgnoredOutsideAllowedPaths));
-                        }
+                var alreadyPatched = MockInjector.IsPatched(assemblyToPatch);
 
-                        PatchResult patchResult;
-
-                        if (toProcessIndex == 0 && patchTestAssembly == PatchTestAssembly.No)
-                            patchResult = new PatchResult(assemblyToPatchPath, null, PatchState.IgnoredTestAssembly);
-                        else if (MockInjector.IsPatched(assemblyToPatch))
-                            patchResult = new PatchResult(assemblyToPatchPath, null, PatchState.AlreadyPatched);
-                        else if (assemblyPath.Contains(assemblyToPatch.Name.Name))
-                        {
-                            mockInjector.Patch(assemblyToPatch);
-
-                            // atomic write of file with backup
-                            var tmpPath = assemblyToPatchPath.Split(new[] {".dll"}, StringSplitOptions.None)[0] +
-                                          ".tmp";
-                            File.Delete(tmpPath);
-                            assemblyToPatch.Write(tmpPath); //$$$$, new WriterParameters { WriteSymbols = true });  // getting exception, haven't looked into it yet
-                            assemblyToPatch.Dispose();
-                            var originalPath = GetPatchBackupPathFor(assemblyToPatchPath);
-                            File.Replace(tmpPath, assemblyToPatchPath, originalPath);
-                            Verify(assemblyToPatchPath);
-                            // $$$ TODO: move pdb file too
-
-                            patchResult = new PatchResult(assemblyToPatchPath, originalPath, PatchState.Patched);
-                        }
-                        else
-                        { // TODO: Nope
-                            patchResult = default(PatchResult);
-                        }
-
-                        patchResults.Add(assemblyToPatchPath, patchResult);
-                    }
+                if (assemblyToPatchPath == testAssemblyPath && (patchOptions & PatchOptions.PatchTestAssembly) == 0)
+                {
+                    if (alreadyPatched)
+                        throw new Exception("Unexpected already-patched test assembly, yet we want PatchTestAssembly.No");
+                    patchResult = new PatchResult(assemblyToPatchPath, null, PatchState.IgnoredTestAssembly);
+                }
+                else if (alreadyPatched)
+                {
+                    patchResult = new PatchResult(assemblyToPatchPath, null, PatchState.AlreadyPatched);
+                }
+                else
+                {
+                    patchResult = Patch(assemblyToPatchPath, assemblyToPatch);
                 }
 
-                return patchResults.Values;
+                patchResults.Add(assemblyToPatchPath, patchResult);
             }
+
+            PatchResult Patch(NPath assemblyToPatchPath, AssemblyDefinition assemblyToPatch)
+            {
+                mockInjector.Patch(assemblyToPatch);
+
+                // atomic write of file with backup
+                // TODO: skip backup if existing file already patched. want the .orig to only be the unpatched file.
+
+                // write to tmp and release the lock
+                var tmpPath = assemblyToPatchPath.ChangeExtension(".tmp");
+                tmpPath.DeleteIfExists();
+                assemblyToPatch.Write(tmpPath); // $$$ , new WriterParameters { WriteSymbols = true }); see https://github.com/jbevain/cecil/issues/421
+                assemblyToPatch.Dispose();
+
+                if ((patchOptions & PatchOptions.SkipPeVerify) == 0)
+                    PeVerify.Verify(tmpPath);
+
+                // move the actual file to backup, and move the tmp to actual
+                var backupPath = GetPatchBackupPathFor(assemblyToPatchPath);
+                File.Replace(tmpPath, assemblyToPatchPath, backupPath);
+
+                // TODO: move pdb file too
+
+                return new PatchResult(assemblyToPatchPath, backupPath, PatchState.Patched);
+            }
+
+            return patchResults.Values;
         }
 
-        // TODO: Fix
-        const string peVerifyLocation = @"C:\Program Files (x86)\Microsoft SDKs\Windows\v10.0A\bin\NETFX 4.6.1 Tools\x64\PEVerify.exe";
-        static void Verify(string assemblyName)
+        static void EnsureMockTypesInFolder(NPath targetFolder)
         {
-            var p = new Process
-            {
-                StartInfo =
-                {
-                    Arguments = $"/nologo \"{assemblyName}\"",
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
-                    FileName = peVerifyLocation,
-                    RedirectStandardError = true,
-                    RedirectStandardOutput = true
-                }
-            };
+            // ensure that our assembly with the mock types is discoverable by putting in the same folder as the dll that is having its types
+            // injected into it. we could mess with the assembly resolver to avoid this, but that won't solve the issue for appdomains and
+            // other environments that we don't control, like peverify.
 
-            var error = "";
-            var output = "";
+            var mockTypesSrcPath = new NPath(MockInjector.MockTypesAssembly.Location);
+            var mockTypesDstPath = targetFolder.Combine(mockTypesSrcPath.FileName);
 
-            p.OutputDataReceived += (_, e) => output += $"{e.Data}\n";
-            p.ErrorDataReceived += (_, e) => error += $"{e.Data}\n";
-
-            p.Start();
-            p.BeginOutputReadLine();
-            p.BeginErrorReadLine();
-
-            p.WaitForExit();
-
-            Console.WriteLine(assemblyName);
-            p.ExitCode.ShouldBe(0, () => $"{error}\n{output}");
+            if (mockTypesSrcPath != mockTypesDstPath)
+                mockTypesSrcPath.Copy(mockTypesDstPath);
         }
 
         public static IReadOnlyCollection<PatchResult> PatchAssemblies(
@@ -160,26 +155,23 @@ namespace NSubstitute.Elevated.Weaver
             }
 
             var nsubElevatedPath = Path.Combine(testAssemblyFolder, "NSubstitute.Elevated.dll");
-            using (var nsubElevatedAssembly = AssemblyDefinition.ReadAssembly(nsubElevatedPath))
+            var mockInjector = new MockInjector();
+
+            foreach (var assemblyPath in testAssemblyPaths)
             {
-                var mockInjector = new MockInjector(nsubElevatedAssembly);
-
-                foreach (var assemblyPath in testAssemblyPaths)
-                {
-                    var assemblyDefinition = AssemblyDefinition.ReadAssembly(assemblyPath);
-                    mockInjector.Patch(assemblyDefinition);
-                    // atomic write of file with backup
-                    var tmpPath = assemblyPath.Split(new[] { ".dll" }, StringSplitOptions.None)[0] + ".tmp";
-                    File.Delete(tmpPath);
-                    assemblyDefinition.Write(tmpPath);//$$$$, new WriterParameters { WriteSymbols = true });  // getting exception, haven't looked into it yet
-                    assemblyDefinition.Dispose();
-                    /*var originalPath = GetPatchBackupPathFor(assemblyToPatchPath);
-                    File.Replace(tmpPath, assemblyToPatchPath, originalPath);*/
-                    // $$$ TODO: move pdb file too
-                }
-
-                return null;
+                var assemblyDefinition = AssemblyDefinition.ReadAssembly(assemblyPath);
+                mockInjector.Patch(assemblyDefinition);
+                // atomic write of file with backup
+                var tmpPath = assemblyPath.Split(new[] { ".dll" }, StringSplitOptions.None)[0] + ".tmp";
+                File.Delete(tmpPath);
+                assemblyDefinition.Write(tmpPath);//$$$$, new WriterParameters { WriteSymbols = true });  // getting exception, haven't looked into it yet
+                assemblyDefinition.Dispose();
+                /*var originalPath = GetPatchBackupPathFor(assemblyToPatchPath);
+                File.Replace(tmpPath, assemblyToPatchPath, originalPath);*/
+                // $$$ TODO: move pdb file too
             }
+
+            return null;
         }
     }
 

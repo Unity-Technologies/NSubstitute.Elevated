@@ -20,27 +20,30 @@ namespace NSubstitute.Elevated.Weaver
         readonly TypeDefinition m_MockPlaceholderType;
         readonly MethodDefinition m_PatchedAssemblyBridgeTryMock;
 
+        public static Assembly MockTypesAssembly { get; } = Assembly.GetExecutingAssembly();
         public const string InjectedMockStaticDataName = "__mock__staticData", InjectedMockDataName = "__mock__data";
 
         static MockInjector()
         {
-            k_MarkAsPatchedKey = Assembly.GetExecutingAssembly().GetName().Name;
-
-            var assemblyHash = Assembly.GetExecutingAssembly().Evidence.GetHostEvidence<Hash>();
+            var assemblyHash = MockTypesAssembly.Evidence.GetHostEvidence<Hash>();
             if (assemblyHash == null)
                 throw new Exception("Assembly not stamped with a hash");
 
+            k_MarkAsPatchedKey = MockTypesAssembly.GetName().Name;
             k_MarkAsPatchedValue = assemblyHash.SHA1.ToHexString();
         }
 
-        public MockInjector(AssemblyDefinition nsubElevatedAssembly)
+        public MockInjector()
         {
-            m_MockPlaceholderType = nsubElevatedAssembly.MainModule
-                .GetType(typeof(MockPlaceholderType).FullName);
+            using (var mockTypesDefinition = AssemblyDefinition.ReadAssembly(MockTypesAssembly.Location))
+            {
+                m_MockPlaceholderType = mockTypesDefinition.MainModule
+                    .GetType(typeof(MockPlaceholderType).FullName);
 
-            m_PatchedAssemblyBridgeTryMock = nsubElevatedAssembly.MainModule
-                .GetType(typeof(PatchedAssemblyBridge).FullName)
-                .Methods.Single(m => m.Name == nameof(PatchedAssemblyBridge.TryMock));
+                m_PatchedAssemblyBridgeTryMock = mockTypesDefinition.MainModule
+                    .GetType(typeof(PatchedAssemblyBridge).FullName)
+                    .Methods.Single(m => m.Name == nameof(PatchedAssemblyBridge.TryMock));
+            }
         }
 
         public void Patch(AssemblyDefinition assembly)
@@ -96,6 +99,8 @@ namespace NSubstitute.Elevated.Weaver
                 return;
             if (type.Name == "<Module>")
                 return;
+            if (type.BaseType.FullName == "System.MulticastDelegate")
+                return;
             if (type.IsExplicitLayout)
                 return;
             if (type.CustomAttributes.Any(a => a.AttributeType.FullName == typeof(CompilerGeneratedAttribute).FullName))
@@ -146,12 +151,9 @@ namespace NSubstitute.Elevated.Weaver
             };
             ctor.Parameters.Add(new ParameterDefinition(type.Module.ImportReference(m_MockPlaceholderType)));
 
-            var body = ctor.Body;
-            body.Instructions.Clear();
+            var il = ctor.Body.GetILProcessor();
 
-            var il = body.GetILProcessor();
-
-            var baseCtors = type.BaseType.Resolve().GetConstructors();
+            var baseCtors = type.BaseType.Resolve().GetConstructors().Where(c=> !c.IsStatic);
 
             var baseMockCtor = (MethodReference)baseCtors.SingleOrDefault(c => c.Parameters.SequenceEqual(ctor.Parameters));
             if (baseMockCtor != null)
@@ -179,7 +181,7 @@ namespace NSubstitute.Elevated.Weaver
 
         void Patch(MethodDefinition method, AssemblyDefinition assembly)
         {
-            if (method.IsCompilerControlled || method.IsConstructor || method.IsAbstract)
+            if (method.IsCompilerControlled || method.IsConstructor || method.IsAbstract || !method.HasBody)
                 return;
 
             method.Body.InitLocals = true;

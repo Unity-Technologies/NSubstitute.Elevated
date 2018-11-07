@@ -1,12 +1,12 @@
 using System;
 using SystemUnderTest;
+using NiceIO;
 using NSubstitute.Exceptions;
 using NUnit.Framework;
 using Shouldly;
 
 namespace NSubstitute.Elevated.Tests
 {
-    [TestFixture]
     class BasicTests
     {
         IDisposable m_Dispose;
@@ -14,7 +14,10 @@ namespace NSubstitute.Elevated.Tests
         [OneTimeSetUp]
         public void Setup()
         {
-            m_Dispose = ElevatedSubstitutionContext.AutoHook(typeof(BasicTests).Assembly.Location, new [] {"SystemUnderTest"});
+            var buildFolder = new NPath(GetType().Assembly.Location).Parent;
+            var systemUnderTest = buildFolder.Combine("SystemUnderTest.dll"); // do not access type directly, want to avoid loading the assembly until it's patched
+
+            m_Dispose = ElevatedSubstitutionContext.AutoHook(systemUnderTest);
         }
 
         [OneTimeTearDown]
