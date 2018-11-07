@@ -1,7 +1,7 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
   <Import Project="../common.targets" />
   <PropertyGroup>
-    <TargetFramework>net461</TargetFramework>
+    <TargetFrameworks>$(Unity_DotNetTargetFrameworks)</TargetFrameworks>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="JetBrains.Annotations">
