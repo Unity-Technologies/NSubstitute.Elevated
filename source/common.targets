@@ -1,8 +1,8 @@
-﻿<Project>
+<Project>
   <PropertyGroup>
     <DefaultItemExcludes>$(DefaultItemExcludes);**\*.bak;**\*.orig</DefaultItemExcludes>
     <Unity_DotNetTargetFrameworks>net461</Unity_DotNetTargetFrameworks>
-    <Unity_CoreTargetFrameworks>netstandard2.0;net35</Unity_CoreTargetFrameworks>
+    <Unity_CoreTargetFrameworks>netstandard2.0</Unity_CoreTargetFrameworks>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
     <DefineConstants>DEBUG;TRACE</DefineConstants>
