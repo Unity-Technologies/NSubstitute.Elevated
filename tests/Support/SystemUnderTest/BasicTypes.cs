@@ -1,7 +1,5 @@
 using System;
-#if TEST_ICALLS
 using System.Runtime.CompilerServices;
-#endif
 
 #pragma warning disable 169
 // ReSharper disable ClassNeverInstantiated.Global
@@ -50,7 +48,6 @@ namespace SystemUnderTest
         public ClassWithNoDefaultCtorNoMethods(string i1, string i2) {}
     }
 
-#   if TEST_ICALLS
     public class ClassWithCtorICall
     {
         public ClassWithCtorICall()
@@ -58,10 +55,9 @@ namespace SystemUnderTest
             DoICall();
         }
 
-        [MethodImpl((MethodImplOptions) 0x1000)]
+        [MethodImpl(MethodImplOptions.InternalCall)]
         static extern void DoICall();
     }
-#   endif // TEST_ICALLS
 
     public class ClassWithCtorThrow
     {

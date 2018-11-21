@@ -1,4 +1,5 @@
 using System;
+using System.Security;
 using SystemUnderTest;
 using NiceIO;
 using NSubstitute.Exceptions;
@@ -79,7 +80,15 @@ namespace NSubstitute.Elevated.Tests
             sub.ShouldBeOfType<ClassWithNoDefaultCtor>();
         }
 
-#       if TEST_ICALLS
+        [Test]
+        public void ClassWithICallInCtor_ThrowsOnInstantiation()
+        {
+            // this just verifies that we actually have an icall compiled in 
+
+            // ReSharper disable once ObjectCreationAsStatement
+            Should.Throw<SecurityException>(() => new ClassWithCtorICall());
+        }
+
         [Test]
         public void ClassWithICallInCtor_TypeDoesNotChange()
         {
@@ -89,8 +98,6 @@ namespace NSubstitute.Elevated.Tests
 
             sub.ShouldBeOfType<ClassWithCtorICall>();
         }
-
-#       endif
 
         [Test]
         public void ClassWithThrowInCtor_TypeDoesNotChange()
