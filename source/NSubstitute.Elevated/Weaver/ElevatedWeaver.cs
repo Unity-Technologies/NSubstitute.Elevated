@@ -50,7 +50,9 @@ namespace NSubstitute.Elevated.Weaver
                 using (var assemblyToPatch = AssemblyDefinition.ReadAssembly(assemblyToPatchPath))
                 {
                     GatherReferences(assemblyToPatchPath, assemblyToPatch);
-                    TryPatch(assemblyToPatchPath, assemblyToPatch);
+
+                    var patchResult = TryPatch(assemblyToPatchPath, assemblyToPatch);
+                    patchResults.Add(assemblyToPatchPath, patchResult);
                 }
             }
 
@@ -64,32 +66,30 @@ namespace NSubstitute.Elevated.Weaver
                     if (referencedAssemblyPath.FileExists())
                         toProcess.Add(referencedAssemblyPath);
                     else if (!patchResults.ContainsKey(referencedAssembly.Name))
-                        patchResults.Add(referencedAssembly.Name, new PatchResult(referencedAssembly.Name, null, PatchState.IgnoredOutsideAllowedPaths));
+                        patchResults.Add(referencedAssembly.Name, new PatchResult(referencedAssembly.Name, null, PatchState.IgnoredForeignAssembly));
                 }
             }
 
-            void TryPatch(NPath assemblyToPatchPath, AssemblyDefinition assemblyToPatch)
+            PatchResult TryPatch(NPath assemblyToPatchPath, AssemblyDefinition assemblyToPatch)
             {
-                PatchResult patchResult;
-
                 var alreadyPatched = MockInjector.IsPatched(assemblyToPatch);
+                var cannotPatch = assemblyToPatch.Name.HasPublicKey;
 
                 if (assemblyToPatchPath == testAssemblyPath && (patchOptions & PatchOptions.PatchTestAssembly) == 0)
                 {
                     if (alreadyPatched)
                         throw new Exception("Unexpected already-patched test assembly, yet we want PatchTestAssembly.No");
-                    patchResult = new PatchResult(assemblyToPatchPath, null, PatchState.IgnoredTestAssembly);
-                }
-                else if (alreadyPatched)
-                {
-                    patchResult = new PatchResult(assemblyToPatchPath, null, PatchState.AlreadyPatched);
-                }
-                else
-                {
-                    patchResult = Patch(assemblyToPatchPath, assemblyToPatch);
+                    if (cannotPatch)
+                        throw new Exception("Cannot patch an assembly with a strong name");
+                    return new PatchResult(assemblyToPatchPath, null, PatchState.IgnoredTestAssembly);
                 }
 
-                patchResults.Add(assemblyToPatchPath, patchResult);
+                if (alreadyPatched)
+                    return new PatchResult(assemblyToPatchPath, null, PatchState.AlreadyPatched);
+                if (cannotPatch)
+                    return new PatchResult(assemblyToPatchPath, null, PatchState.IgnoredForeignAssembly);
+                
+                return Patch(assemblyToPatchPath, assemblyToPatch);
             }
 
             PatchResult Patch(NPath assemblyToPatchPath, AssemblyDefinition assemblyToPatch)
@@ -177,12 +177,12 @@ namespace NSubstitute.Elevated.Weaver
 
     public enum PatchState
     {
-        GeneralFailure,             // something else went wrong
-        IgnoredTestAssembly,        // don't patch the test assembly itself, as we're requiring that to always be separate from the systems under test
-        IgnoredOutsideAllowedPaths, // don't want to patch things that are not "ours"
-        //AlreadyPatchedOld,          // assy already patched against an older set of tooling TODO: implement
-        AlreadyPatched,             // assy already patched against current tooling
-        Patched,                    // assy patched and old one backed up
+        GeneralFailure,            // something else went wrong
+        IgnoredTestAssembly,       // don't patch the test assembly itself, as we're requiring that to always be separate from the systems under test
+        IgnoredForeignAssembly,    // don't want to patch things that are not "ours"
+        //AlreadyPatchedOld,       // assy already patched against an older set of tooling TODO: implement
+        AlreadyPatched,            // assy already patched against current tooling
+        Patched,                   // assy patched and old one backed up
     }
 
     public struct PatchResult

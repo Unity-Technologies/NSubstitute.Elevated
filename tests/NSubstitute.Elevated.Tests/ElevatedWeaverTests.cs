@@ -31,6 +31,8 @@ namespace NSubstitute.Elevated.Tests.Utilities
     //    class Derived : Base { Derived() : base(1) { } }
     //
     // class with `public delegate void Blah();`
+    //
+    // patching a system (signed) assembly
 
     public class ElevatedWeaverTests : PatchingFixture
     {
@@ -78,7 +80,7 @@ namespace NSubstitute.Elevated.Tests.Utilities
 
             var results = ElevatedWeaver.PatchAllDependentAssemblies(testAssemblyPath, PatchOptions.PatchTestAssembly);
             results.Count.ShouldBe(2);
-            results.ShouldContain(new PatchResult("mscorlib", null, PatchState.IgnoredOutsideAllowedPaths));
+            results.ShouldContain(new PatchResult("mscorlib", null, PatchState.IgnoredForeignAssembly));
             results.ShouldContain(new PatchResult(testAssemblyPath, ElevatedWeaver.GetPatchBackupPathFor(testAssemblyPath), PatchState.Patched));
 
             m_TestAssembly = AssemblyDefinition.ReadAssembly(testAssemblyPath);
