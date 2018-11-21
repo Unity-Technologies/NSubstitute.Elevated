@@ -26,6 +26,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -295,6 +296,7 @@ namespace NiceIO
             return "\"" + ToString(slashMode) + "\"";
         }
 
+        [DebuggerStepThrough]
         public override string ToString()
         {
             return ToString(SlashMode.Native);
@@ -329,6 +331,7 @@ namespace NiceIO
             return sb.ToString();
         }
 
+        [DebuggerStepThrough]
         public static implicit operator string(NPath path)
         {
             return path.ToString();
