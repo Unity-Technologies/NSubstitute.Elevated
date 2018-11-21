@@ -112,7 +112,7 @@ namespace NSubstitute.Elevated
                 {
                     var found = field.GetValue(null);
                     if (found == null)
-                        throw new SubstituteException("Unexpected static unmock of an already unmocked type");
+                        throw new SubstituteException("Unexpected static unmock of an already-unmocked type");
                     if (found != callRouter)
                         throw new SubstituteException("Discovered unexpected call router attached in static mock context");
 

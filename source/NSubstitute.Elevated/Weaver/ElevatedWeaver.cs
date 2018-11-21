@@ -37,7 +37,7 @@ namespace NSubstitute.Elevated.Weaver
             var patchResults = new Dictionary<string, PatchResult>(StringComparer.OrdinalIgnoreCase);
             var mockInjector = new MockInjector();
 
-            EnsureMockTypesInFolder(testAssemblyPath.Parent);
+            EnsureMockTypesAssemblyInFolder(testAssemblyPath.Parent);
 
             for (var toProcessIndex = 0; toProcessIndex < toProcess.Count; ++toProcessIndex)
             {
@@ -120,7 +120,7 @@ namespace NSubstitute.Elevated.Weaver
             return patchResults.Values;
         }
 
-        static void EnsureMockTypesInFolder(NPath targetFolder)
+        static void EnsureMockTypesAssemblyInFolder(NPath targetFolder)
         {
             // ensure that our assembly with the mock types is discoverable by putting in the same folder as the dll that is having its types
             // injected into it. we could mess with the assembly resolver to avoid this, but that won't solve the issue for appdomains and

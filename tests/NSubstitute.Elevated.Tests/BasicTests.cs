@@ -152,14 +152,14 @@ namespace NSubstitute.Elevated.Tests
         {
             var sub = Substitute.For<SimpleClass>();
 
-            sub.VoidMethod(5);
+            sub.VoidMethodWithParam(5);
             sub.Modified.ShouldBe(0);
 
-            sub.ReturnMethod(5).ShouldBe(0);
+            sub.ReturnMethodWithParam(5).ShouldBe(0);
             sub.Modified.ShouldBe(0);
 
-            sub.ReturnMethod(5).Returns(10);
-            sub.ReturnMethod(5).ShouldBe(10);
+            sub.ReturnMethodWithParam(5).Returns(10);
+            sub.ReturnMethodWithParam(5).ShouldBe(10);
             sub.Modified.ShouldBe(0);
         }
 
@@ -168,14 +168,14 @@ namespace NSubstitute.Elevated.Tests
         {
             var sub = Substitute.ForPartsOf<SimpleClass>();
 
-            sub.VoidMethod(5);
+            sub.VoidMethodWithParam(5);
             sub.Modified.ShouldBe(5);
 
-            sub.ReturnMethod(3).ShouldBe(8);
+            sub.ReturnMethodWithParam(3).ShouldBe(8);
             sub.Modified.ShouldBe(8);
 
-            sub.ReturnMethod(4).Returns(10);
-            sub.ReturnMethod(4).ShouldBe(10);
+            sub.ReturnMethodWithParam(4).Returns(10);
+            sub.ReturnMethodWithParam(4).ShouldBe(10);
             sub.Modified.ShouldBe(8);
         }
     }

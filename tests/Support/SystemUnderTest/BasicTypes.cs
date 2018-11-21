@@ -1,17 +1,15 @@
 using System;
-//using NSubstitute.Elevated.WeaverInternals;
-
-//using NSubstitute.Elevated.WeaverInternals;
-
 #if TEST_ICALLS
 using System.Runtime.CompilerServices;
 #endif
 
 #pragma warning disable 169
+// ReSharper disable ClassNeverInstantiated.Global
 // ReSharper disable InconsistentNaming
 // ReSharper disable MemberInitializerValueIgnored
 // ReSharper disable PublicConstructorInAbstractClass
 // ReSharper disable UnusedMember.Local
+// ReSharper disable UnusedMember.Global
 // ReSharper disable UnusedParameter.Local
 
 namespace SystemUnderTest
@@ -91,35 +89,9 @@ namespace SystemUnderTest
     {
         public int Modified;
 
-        //actual
         public void VoidMethod() => ++Modified;
         public int ReturnMethod() => ++Modified;
-
-        //hack until patching works
-        public void VoidMethod(int count)
-        {
-            /*if (PatchedAssemblyBridgeX.TryMock(typeof(SimpleClass), this, typeof(void), out var _, Type.EmptyTypes, new object[] { count }))
-                return;*/
-
-            Modified += count;
-        }
-
-        public int ReturnMethod(int count)
-        {
-            /*if (PatchedAssemblyBridgeX.TryMock(typeof(SimpleClass), this, typeof(int), out var returnValue, Type.EmptyTypes, new object[] { count }))
-                return (int)returnValue;#1#*/
-
-            return Modified += count;
-        }
+        public void VoidMethodWithParam(int count) => Modified += count;
+        public int ReturnMethodWithParam(int count) => Modified += count;
     }
 }
-
-/*namespace NSubstitute.Elevated.WeaverInternals
-{
-    public static class PatchedAssemblyBridgeX
-    {
-        public delegate bool TryMockProc(Type actualType, object instance, Type mockedReturnType, out object mockedReturnValue, Type[] methodGenericTypes, object[] args);
-
-        public static TryMockProc TryMock;
-    }
-}*/
