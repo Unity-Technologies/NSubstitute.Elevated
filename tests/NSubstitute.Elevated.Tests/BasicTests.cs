@@ -110,6 +110,7 @@ namespace NSubstitute.Elevated.Tests
         [Test]
         public void ClassWithCtorParams_WhenMocked_ShouldThrow()
         {
+            // TODO: why commented out?
 //            Should.Throw<MissingMethodException>(() => Substitute.For<ClassWithNoDefaultCtor>());
             Should.Throw<SubstituteException>(() => Substitute.For<ClassWithNoDefaultCtor>("test"));
             Should.Throw<SubstituteException>(() => Substitute.For<ClassWithNoDefaultCtor>(null, null));
@@ -127,6 +128,7 @@ namespace NSubstitute.Elevated.Tests
             var subNoCtor1 = Substitute.For<ClassWithNoDefaultCtorNoMethods>(null);
             subNoCtor1.GetType().ShouldBe(typeof(ClassWithNoDefaultCtorNoMethods));
 
+            // TODO: why commented out?
 //            var subNoCtor2 = Substitute.For<ClassWithNoDefaultCtorNoMethods>("test"); TODO: This will cause an exception as ForPartsOf should be used. Maybe do that here instead?
 //            subNoCtor2.GetType().ShouldBe(typeof(ClassWithNoDefaultCtorNoMethods));
 
