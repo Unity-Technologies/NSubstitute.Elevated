@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
+using System.Reflection.Emit;
 using System.Runtime.CompilerServices;
 using NSubstitute.Core;
 using NSubstitute.Core.Arguments;
@@ -199,19 +200,19 @@ namespace NSubstitute.Elevated.Tests
         class ElevatedCallRouterFactory : ICallRouterFactory
         {
             public ICallRouter Create(ISubstitutionContext substitutionContext, SubstituteConfig config)
-            => new ElevatedCallRouter(new SubstituteState(substitutionContext, config), substitutionContext, new RouteFactory());
+            => new InjectedCallRouter(new SubstituteState(substitutionContext, config), substitutionContext, new RouteFactory());
         }
 
-        class ElevatedCallRouter : CallRouter
+        class InjectedCallRouter : CallRouter
         {
-            public ElevatedCallRouter(ISubstituteState substituteState, ISubstitutionContext context, IRouteFactory routeFactory)
+            public InjectedCallRouter(ISubstituteState substituteState, ISubstitutionContext context, IRouteFactory routeFactory)
                 : base(substituteState, context, routeFactory) => SubstituteConfig = substituteState.SubstituteConfig;
 
             public SubstituteConfig SubstituteConfig { get; }
         }
 
         internal static SubstituteConfig? TryGetSubstituteConfig(ICallRouter callRouter)
-        => (callRouter as ElevatedCallRouter)?.SubstituteConfig;
+        => (callRouter as InjectedCallRouter)?.SubstituteConfig;
 
         // this is the only one we're overriding for now, so we can hook our own factory in there.
         ISubstituteFactory ISubstitutionContext.SubstituteFactory => m_ElevatedSubstituteFactory;
@@ -267,13 +268,15 @@ namespace NSubstitute.Elevated.Tests
 
         static void InstallProxy()
         {
-            var origin = GetMethodStat(typeof(StaticClass).GetMethod("ReturnArgument"));
-            var dest = GetMethodStat(typeof(TestInjection).GetMethod("ReturnArgument_Proxy"));
+            var staticMethod = typeof(StaticClass).GetMethod("ReturnArgument");
+            var origin = GetAddressOfJittedMethod(staticMethod);
+            var proxy = GetOrCreateProxyFor(staticMethod);
+            var dest = GetAddressOfJittedMethod(proxy);
 
             WriteJump(origin, dest);
         }
 
-        static long GetMethodStat(MethodInfo methodInfo)
+        static long GetAddressOfJittedMethod(MethodInfo methodInfo)
         {
             var handle = methodInfo.MethodHandle;
             RuntimeHelpers.PrepareMethod(handle);
@@ -384,7 +387,6 @@ namespace NSubstitute.Elevated.Tests
             [MethodImpl(MethodImplOptions.NoInlining)]
             public static int ReturnArgument(int i)
             {
-                //return ReturnArgument_Proxy(i);
                 return i;
             }
         }
@@ -392,13 +394,70 @@ namespace NSubstitute.Elevated.Tests
         public static int ReturnArgument_Proxy(int i)
         {
             object returnValue = 0;
-            AdrianosMagic.TryMock(typeof(StaticClass), null, typeof(int), out returnValue, new Type[0], new[] { (object) i });
+            ElevatedMockingSupport.TryMock(typeof(StaticClass), null, typeof(int), out returnValue, new Type[0], new[] { (object) i });
 
             return (int)returnValue;
         }
 
+        public static MethodInfo GetOrCreateProxyFor(MethodInfo methodInfo)
+        {
+            // TODO: cache the proxy based on the provided information.
+            // TODO: make sure names are unique.
+            
+            var tryMockMethod = typeof(ElevatedMockingSupport).GetMethod("TryMock");
+            
+            var method = new DynamicMethod($"{methodInfo.Name}_Proxy",
+                methodInfo.ReturnType, 
+                methodInfo.GetParameters().Select(p => p.ParameterType).ToArray(), 
+                methodInfo.Module);
+            
+            var il = method.GetILGenerator();
 
-        public static class AdrianosMagic
+            // object returnValue;
+            il.DeclareLocal(typeof(object));
+            
+            // var a = typeof(StaticClass);
+            il.Emit(OpCodes.Ldtoken, typeof(StaticClass));
+            // var b = null;
+            il.Emit(OpCodes.Ldnull);
+            // var c = typeof(int);
+            il.Emit(OpCodes.Ldtoken, typeof(int));
+            // out returnValue
+            il.Emit(OpCodes.Ldloca_S, 0);
+            // var d = new Type[0];
+            il.Emit(OpCodes.Ldc_I4_0);
+            il.Emit(OpCodes.Newarr, typeof(Type));
+            // var e = new[] { (object) i };
+            il.Emit(OpCodes.Ldc_I4_1); // size
+            il.Emit(OpCodes.Newarr, typeof(object));
+            il.Emit(OpCodes.Dup);
+            il.Emit(OpCodes.Ldc_I4_0); // index
+            il.Emit(OpCodes.Ldarg_0); // arg-index
+            il.Emit(OpCodes.Box, typeof(int)); // convert type to System.Object
+            il.Emit(OpCodes.Stelem_Ref);
+            // ElevatedMockingSupport.TryMock(a, b, c, out returnValue, d, e);
+            il.Emit(OpCodes.Call, tryMockMethod);
+            il.Emit(OpCodes.Pop);
+            //return (int)returnValue;
+            il.Emit(OpCodes.Ldloc_0);
+            il.Emit(OpCodes.Unbox_Any, methodInfo.ReturnType); // TODO: convert
+            il.Emit(OpCodes.Ret);
+
+            foreach (var parameterInfo in methodInfo.GetParameters())
+            {
+                method.DefineParameter(parameterInfo.Position, parameterInfo.Attributes, parameterInfo.Name);
+            }
+
+            var @delegate = method.CreateDelegate(
+                typeof(Func<,>).MakeGenericType(
+                    methodInfo.GetParameters()[0].ParameterType,
+                    methodInfo.ReturnType));
+            
+            return @delegate.GetMethodInfo();
+        }
+
+
+        public static class ElevatedMockingSupport
         {
             // returns true if a mock is in place and it is taking over functionality. instance may be null
             // if static. mockedReturnValue is ignored in a void return func.
@@ -421,3 +480,10 @@ namespace NSubstitute.Elevated.Tests
         }
     }
 }
+
+// [ ] Generate proxy dynamically specifically for that method
+// [ ] Generate proxy generically
+// [ ] Generate proxy for instance
+// [ ] Generate proxy for structs
+// [ ] Remove the needs of injection (GetHashCode + Global dictionary/instance + per-type in case of statics)
+// [ ] Clenaup code
