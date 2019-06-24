@@ -2,6 +2,7 @@
   <Import Project="../../source/common.targets" />
   <PropertyGroup>
     <TargetFrameworks>$(Unity_DotNetTargetFrameworks)</TargetFrameworks>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="JetBrains.Annotations">
