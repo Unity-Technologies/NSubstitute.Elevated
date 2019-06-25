@@ -117,10 +117,17 @@ namespace NSubstitute.Elevated.RuntimeInjection
         
         object CreateStaticProxy(Type typeToProxy, ICallRouter callRouter)
         {
-            var originalMethod = typeToProxy.GetMethod("ReturnArgument");
-            var proxyUninstaller = RuntimeInjectionSupport.InstallDynamicMethodTrampoline(
-                originalMethod,
-                ((RuntimeInjectionSupport.Context)SubstitutionContext.Current).TryMockProxyGenerator.GetOrCreateTryMockProxyFor(originalMethod));
+            var proxyUninstallers = new List<IDisposable>();
+
+            foreach (var originalMethod in typeToProxy.GetMethods())
+            {
+                if (CanMock(originalMethod))
+                    proxyUninstallers.Add(
+                        RuntimeInjectionSupport.InstallDynamicMethodTrampoline(
+                            originalMethod,
+                            ((RuntimeInjectionSupport.Context)SubstitutionContext.Current).TryMockProxyGenerator.GetOrCreateTryMockProxyFor(originalMethod)));
+            }
+            
             
             var field = GetStaticRouterField(typeToProxy);
             if (field.GetValue(null) != null)
@@ -137,8 +144,17 @@ namespace NSubstitute.Elevated.RuntimeInjection
                     throw new SubstituteException("Discovered unexpected call router attached in static mock context");
 
                 field.SetValue(null, null);
-                proxyUninstaller.Dispose();
+                foreach (var proxyUninstaller in proxyUninstallers)
+                {
+                    proxyUninstaller.Dispose();
+                }
+                proxyUninstallers.Clear();
             }));
+        }
+
+        bool CanMock(MethodInfo methodInfo)
+        {
+            return methodInfo.Name == "ReturnArgument" || methodInfo.Name == "ReturnHalfArgument";
         }
 
         // called from patched assembly code via the PatchedAssemblyBridge. return true if the mock is handling the behavior.

@@ -15,6 +15,12 @@ namespace NSubstitute.Elevated.Tests
         {
             return i;
         }
+        
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public static int ReturnHalfArgument(int i)
+        {
+            return i/2;
+        }
     }
     
     public class TestInjection
@@ -40,13 +46,28 @@ namespace NSubstitute.Elevated.Tests
             {
                 StaticClass.ReturnArgument(1).Returns(10);
                 StaticClass.ReturnArgument(4).Returns(14);
+                
+                StaticClass.ReturnHalfArgument(2).Returns(4);
 
                 StaticClass.ReturnArgument(1).ShouldBe(10);
                 StaticClass.ReturnArgument(4).ShouldBe(14);
+                
+                StaticClass.ReturnHalfArgument(2).ShouldBe(4);
             }
             
             StaticClass.ReturnArgument(1).ShouldBe(1);
             StaticClass.ReturnArgument(4).ShouldBe(4);
+            StaticClass.ReturnHalfArgument(2).ShouldBe(1);
+        }
+        
+        [Test]
+        [Ignore("This doesn't work. Need to debug what's going on, maybe it will be easier on windows.")]
+        public void StaticMethodInjectionWorks2()
+        {
+            using (SubstituteStatic.For<StaticClass>())
+            {
+                StaticClass.ReturnArgument(2).ShouldBe(2);
+            }
         }
     }
 }
