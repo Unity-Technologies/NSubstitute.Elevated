@@ -7,36 +7,12 @@ using System.Reflection.Emit;
 namespace NSubstitute.Elevated.RuntimeInjection {
     class TryMockProxyGenerator
     {
-        struct Signature
+        Dictionary<MethodInfo, Delegate> m_Cache = new Dictionary<MethodInfo, Delegate>(new MethodInfoComparer());
+
+        struct MethodInfoComparer : IEqualityComparer<MethodInfo>
         {
-            public MethodInfo MethodInfo { get; }
-
-            Signature(MethodInfo methodInfo)
+            public bool Equals(MethodInfo xmi, MethodInfo ymi)
             {
-                MethodInfo = methodInfo;
-            }
-
-            public bool Equals(Signature s)
-            {
-                // TODO: improve!
-                return MethodInfo.Name == s.MethodInfo.Name;
-            }
-
-            public static Signature For(MethodInfo methodInfo)
-            {
-                return new Signature(methodInfo);
-            }
-        }
-
-        Dictionary<Signature, Delegate> m_Cache = new Dictionary<Signature, Delegate>(new SignatureComparer());
-
-        struct SignatureComparer : IEqualityComparer<Signature>
-        {
-            public bool Equals(Signature x, Signature y)
-            {
-                var xmi = x.MethodInfo;
-                var ymi = y.MethodInfo;
-
                 if (xmi.IsStatic != ymi.IsStatic)
                     return false;
                 
@@ -58,19 +34,19 @@ namespace NSubstitute.Elevated.RuntimeInjection {
                         return false;
                 }
                 
-                return x.Equals(y);
+                return xmi.Equals(ymi);
             }
 
-            public int GetHashCode(Signature s)
+            public int GetHashCode(MethodInfo s)
             {
-                var hashCode = s.MethodInfo.ReturnType.GetHashCode();
+                var hashCode = s.ReturnType.GetHashCode();
 
-                foreach (var parameterInfo in s.MethodInfo.GetParameters())
+                foreach (var parameterInfo in s.GetParameters())
                 {
                     hashCode ^= parameterInfo.ParameterType.GetHashCode();
                 }
 
-                if (s.MethodInfo.IsStatic)
+                if (s.IsStatic)
                     hashCode ^= 43867;
                 
                 // TODO: generic args
@@ -86,13 +62,12 @@ namespace NSubstitute.Elevated.RuntimeInjection {
 
         internal MethodInfo GetOrCreateTryMockProxyFor(MethodInfo methodInfo)
         {
-            var signature = Signature.For(methodInfo);
-            if (m_Cache.TryGetValue(signature, out var @delegate))
+            if (m_Cache.TryGetValue(methodInfo, out var @delegate))
                 return @delegate.GetMethodInfo();
 
             var parameterInfos = methodInfo.GetParameters();
             var dynamicMethod = new DynamicMethod(
-                $"{methodInfo.Name}_Proxy_{signature.GetHashCode()}",
+                $"{methodInfo.Name}_Proxy_{methodInfo.GetHashCode()}",
                 methodInfo.Attributes,
                 methodInfo.CallingConvention,
                 methodInfo.ReturnType,
@@ -140,7 +115,7 @@ namespace NSubstitute.Elevated.RuntimeInjection {
                 generator.Emit(OpCodes.Ldc_I4, index); // index
                 generator.Emit(OpCodes.Ldarg, index); // arg-index
                 if(parameterInfo.ParameterType.IsValueType)
-                    generator.Emit(OpCodes.Box, parameterInfo.ParameterType); // convert type to System.Object
+                    generator.Emit(OpCodes.Box, parameterInfo.ParameterType);
                 generator.Emit(OpCodes.Stelem_Ref);
                 ++index;
             }
@@ -170,7 +145,7 @@ namespace NSubstitute.Elevated.RuntimeInjection {
 
             @delegate = dynamicMethod.CreateDelegate(DelegateTypeFor(methodInfo));
 
-            m_Cache.Add(signature, @delegate);
+            m_Cache.Add(methodInfo, @delegate);
             
             // TODO: are we leaking this?
             return @delegate.GetMethodInfo();
