@@ -95,6 +95,11 @@ namespace NSubstitute.Elevated.RuntimeInjection
 
         object CreateStaticProxy(Type typeToProxy, ICallRouter callRouter)
         {
+            var originalMethod = typeToProxy.GetMethod("ReturnArgument");
+            var proxyUninstaller = RuntimeInjectionSupport.InstallDynamicMethodTrampoline(
+                originalMethod, 
+                RuntimeInjectionSupport.GetOrCreateProxyFor(originalMethod));
+            
             var field = GetStaticRouterField(typeToProxy);
             if (field.GetValue(null) != null)
                 throw new SubstituteException("Cannot substitute the same type twice (did you forget to Dispose() your previous substitute?)");
@@ -110,6 +115,7 @@ namespace NSubstitute.Elevated.RuntimeInjection
                     throw new SubstituteException("Discovered unexpected call router attached in static mock context");
 
                 field.SetValue(null, null);
+                proxyUninstaller.Dispose();
             }));
         }
 

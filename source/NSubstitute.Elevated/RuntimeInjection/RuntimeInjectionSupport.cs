@@ -153,7 +153,7 @@ namespace NSubstitute.Elevated.RuntimeInjection
             return context.TryMock(actualType, instance, mockedReturnType, out mockedReturnValue, method, methodGenericTypes, args);
         }
 
-        static MethodInfo GetOrCreateProxyFor(MethodInfo methodInfo)
+        internal static MethodInfo GetOrCreateProxyFor(MethodInfo methodInfo)
         {
             // TODO: cache the proxy based on the provided information.
             // TODO: make sure names are unique.
@@ -217,18 +217,71 @@ namespace NSubstitute.Elevated.RuntimeInjection
             return @delegate.GetMethodInfo();
         }
 
-        public static void InstallProxy(MethodInfo staticMethod)
+        struct DynamicMethodTrampolineDisposer : IDisposable
         {
-            var origin = GetAddressOfMethod(staticMethod);
-            var proxy = GetOrCreateProxyFor(staticMethod);
-            var dest = GetAddressOfMethod(proxy);
+            long m_OriginOffset;
+            byte[] m_OriginalBytes;
 
-            MemoryUtilities.WriteJump(origin, dest);
+            public DynamicMethodTrampolineDisposer(long originOffset, byte[] originalBytes)
+            {
+                m_OriginOffset = originOffset;
+                m_OriginalBytes = originalBytes;
+            }
+
+            public void Dispose()
+            {
+                MemoryUtilities.WriteBytes(m_OriginOffset, m_OriginalBytes);
+            }
         }
 
-        public static void RemoveProxy()
+        public static unsafe IDisposable InstallDynamicMethodTrampoline(MethodInfo staticMethod, MethodInfo dynamicMethod)
         {
+            var origin = GetAddressOfMethod(staticMethod);
+            var dest = GetAddressOfMethod(dynamicMethod);
+
+            var memory = origin;
+            var originOffset = memory;
+            byte[] originalBytes;
             
+            MemoryUtilities.UnprotectMemoryPage(memory);
+            
+            if (IntPtr.Size == sizeof(long))
+            {
+                if (MemoryUtilities.CompareBytes(memory, new byte[] { 0xe9 }))
+                {
+                    var offset = MemoryUtilities.ReadInt(memory + 1);
+                    memory += 5 + offset;
+                }
+
+                originOffset = memory;
+                originalBytes = new byte[12];
+                
+                var p = (byte*)memory;
+                for(var i = 0; i < originalBytes.Length; ++i, ++p)
+                    originalBytes[i] = *p;
+
+                memory = MemoryUtilities.WriteBytes(memory, new byte[] { 0x48, 0xB8 });
+                memory = MemoryUtilities.WriteLong(memory, dest);
+                memory = MemoryUtilities.WriteBytes(memory, new byte[] { 0xFF, 0xE0 });
+            }
+            else
+            {
+                originalBytes = new byte[8];
+                
+                var p = (byte*)memory;
+                for(var i = 0; i < originalBytes.Length; ++i, ++p)
+                    originalBytes[i] = *p;
+                
+                memory = MemoryUtilities.WriteByte(memory, 0x68);
+                memory = MemoryUtilities.WriteInt(memory, (int)dest);
+                memory = MemoryUtilities.WriteByte(memory, 0xc3);
+            }
+
+            MemoryUtilities.FlushInstructionCache(originOffset);
+
+            MemoryUtilities.ProtectMemoryPage(originOffset);
+
+            return new DynamicMethodTrampolineDisposer(originOffset, originalBytes);
         }
 
         static long GetAddressOfMethod(MethodInfo methodInfo)
