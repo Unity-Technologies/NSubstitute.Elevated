@@ -17,9 +17,21 @@ namespace NSubstitute.Elevated.Tests
         }
         
         [MethodImpl(MethodImplOptions.NoInlining)]
+        public static int AddArguments(int a, int b, int c)
+        {
+            return a + b + c;
+        }
+        
+        [MethodImpl(MethodImplOptions.NoInlining)]
         public static int ReturnHalfArgument(int i)
         {
             return i/2;
+        }
+        
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public static object ReturnArgument(object i)
+        {
+            return i;
         }
     }
     
@@ -68,6 +80,32 @@ namespace NSubstitute.Elevated.Tests
             {
                 StaticClass.ReturnArgument(2).ShouldBe(2);
             }
+        }
+        
+        [Test]
+        public void StaticMethodInjectionWorksWithReferenceTypeReturn()
+        {
+            using (SubstituteStatic.For<StaticClass>())
+            {
+                StaticClass.ReturnArgument("gabriele").Returns("cds");
+                
+                StaticClass.ReturnArgument("gabriele").ShouldBe("cds");
+            }
+                
+            StaticClass.ReturnArgument("gabriele").ShouldBe("gabriele");
+        }
+        
+        [Test]
+        public void StaticMethodInjectionWorksWithMultipleArguments()
+        {
+            using (SubstituteStatic.For<StaticClass>())
+            {
+                StaticClass.AddArguments(1,2,3).Returns(12);
+                
+                StaticClass.AddArguments(1, 2, 3).ShouldBe(12);
+            }
+            
+            StaticClass.AddArguments(1, 2, 3).ShouldBe(6);
         }
     }
 }

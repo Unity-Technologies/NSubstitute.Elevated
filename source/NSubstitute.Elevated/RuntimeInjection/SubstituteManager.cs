@@ -126,6 +126,8 @@ namespace NSubstitute.Elevated.RuntimeInjection
                         RuntimeInjectionSupport.InstallDynamicMethodTrampoline(
                             originalMethod,
                             ((RuntimeInjectionSupport.Context)SubstitutionContext.Current).TryMockProxyGenerator.GetOrCreateTryMockProxyFor(originalMethod)));
+                else
+                    Console.WriteLine($"Method {originalMethod.DeclaringType.FullName}::{originalMethod.Name} is not being mocked");
             }
             
             
@@ -152,9 +154,15 @@ namespace NSubstitute.Elevated.RuntimeInjection
             }));
         }
 
-        bool CanMock(MethodInfo methodInfo)
+        static bool CanMock(MethodInfo methodInfo)
         {
-            return methodInfo.Name == "ReturnArgument" || methodInfo.Name == "ReturnHalfArgument";
+            if (methodInfo.GetGenericArguments().Length > 0)
+                return false;
+
+            if (!methodInfo.IsStatic)
+                return false;
+            
+            return true;
         }
 
         // called from patched assembly code via the PatchedAssemblyBridge. return true if the mock is handling the behavior.
