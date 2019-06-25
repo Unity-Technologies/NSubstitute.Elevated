@@ -17,6 +17,10 @@ namespace NSubstitute.Elevated
         // best to wrap static substitutes in `using` so they will auto-dispose. this is important because we're dealing with
         // statics, which are global, and without cleanup, substitute will accidentally leak across tests.
         public static Proxy For<T>() => For(typeof(T));
+        
+        public static Proxy ForPartsOf<T>() => ForPartsOf(typeof(T));
         public static Proxy For(Type staticType) => Substitute.For<Proxy>(staticType);
+        
+        public static Proxy ForPartsOf(Type staticType) => Substitute.ForPartsOf<Proxy>(staticType);
     }
 }

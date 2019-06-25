@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
@@ -52,7 +51,7 @@ namespace NSubstitute.Elevated.RuntimeInjection
                 // the type we want comes from SubstituteStatic.For as a single ctor arg
                 var actualType = (Type)constructorArguments[0];
 
-                proxy = CreateStaticProxy(actualType, callRouter);
+                proxy = CreateStaticProxy(actualType, callRouter, substituteConfig == SubstituteConfig.CallBaseByDefault);
             }
             else
             {
@@ -98,7 +97,7 @@ namespace NSubstitute.Elevated.RuntimeInjection
         // returns true if a mock is in place and it is taking over functionality. instance may be null
         // if static. mockedReturnValue is ignored in a void return func.
         [MethodImpl(MethodImplOptions.NoInlining)]
-        public static bool TryMockWrapper(Type actualType, object instance, Type mockedReturnType, out object mockedReturnValue, Type[] methodGenericTypes, object[] args)
+        public static bool TryMockWrapper(Type actualType, object instance, Type mockedReturnType, out object mockedReturnValue, Type[] methodGenericTypes, MethodBase originalMethod, object[] args)
         {
             if (!(SubstitutionContext.Current is RuntimeInjectionSupport.Context context))
             {
@@ -106,26 +105,26 @@ namespace NSubstitute.Elevated.RuntimeInjection
                 return false;
             }
 
-            var method = (MethodInfo) new StackTrace(1).GetFrame(0).GetMethod();
-
-            if (method.IsGenericMethodDefinition)
-                method = method.MakeGenericMethod(methodGenericTypes);
-
-            return context.TryMock(actualType, instance, mockedReturnType, out mockedReturnValue, method, methodGenericTypes, args);
+            return context.TryMock(actualType, instance, mockedReturnType, out mockedReturnValue, originalMethod, methodGenericTypes, args);
         }
 
-        
-        object CreateStaticProxy(Type typeToProxy, ICallRouter callRouter)
+
+        object CreateStaticProxy(Type typeToProxy, ICallRouter callRouter, bool callBaseByDefault)
         {
-            var proxyUninstallers = new List<IDisposable>();
+            var trampolines = new List<IDisposable>();
 
             foreach (var originalMethod in typeToProxy.GetMethods())
             {
                 if (CanMock(originalMethod))
-                    proxyUninstallers.Add(
+                {
+                    var tryMockProxyGenerator = ((RuntimeInjectionSupport.Context)SubstitutionContext.Current).TryMockProxyGenerator;
+                    tryMockProxyGenerator.GenerateProxiesFor(originalMethod, callBaseByDefault);
+                    
+                    trampolines.Add(
                         RuntimeInjectionSupport.InstallDynamicMethodTrampoline(
                             originalMethod,
-                            ((RuntimeInjectionSupport.Context)SubstitutionContext.Current).TryMockProxyGenerator.GetOrCreateTryMockProxyFor(originalMethod)));
+                            tryMockProxyGenerator.GetTryMockProxydDelegateFor(originalMethod).GetMethodInfo()));
+                }
                 else
                     Console.WriteLine($"Method {originalMethod.DeclaringType.FullName}::{originalMethod.Name} is not being mocked");
             }
@@ -146,11 +145,11 @@ namespace NSubstitute.Elevated.RuntimeInjection
                     throw new SubstituteException("Discovered unexpected call router attached in static mock context");
 
                 field.SetValue(null, null);
-                foreach (var proxyUninstaller in proxyUninstallers)
+                foreach (var trampoline in trampolines)
                 {
-                    proxyUninstaller.Dispose();
+                    trampoline.Dispose();
                 }
-                proxyUninstallers.Clear();
+                trampolines.Clear();
             }));
         }
 

@@ -73,11 +73,22 @@ namespace NSubstitute.Elevated.Tests
         }
         
         [Test]
-        [Ignore("This doesn't work. Need to debug what's going on, maybe it will be easier on windows.")]
-        public void StaticMethodInjectionWorks2()
+        public void StaticMethodInjectionWorksIfForPartsOfIsNotUsed()
         {
             using (SubstituteStatic.For<StaticClass>())
             {
+                StaticClass.ReturnArgument(2).ShouldBe(0);
+            }
+        }
+        
+        [Test]
+        public void StaticMethodInjectionWorksIfForPartsOfIsUsed()
+        {
+            using (SubstituteStatic.ForPartsOf<StaticClass>())
+            {
+                StaticClass.ReturnArgument(4).Returns(10);
+                
+                StaticClass.ReturnArgument(4).ShouldBe(10);
                 StaticClass.ReturnArgument(2).ShouldBe(2);
             }
         }

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using NSubstitute.Core;
@@ -44,9 +45,19 @@ namespace NSubstitute.Elevated.RuntimeInjection
                 public SubstituteConfig SubstituteConfig { get; }
             }
 
-            internal bool TryMock(Type actualType, object instance, Type mockedReturnType, out object mockedReturnValue, MethodInfo method, Type[] methodGenericTypes, object[] args)
+            internal bool TryMock(Type actualType, object instance, Type mockedReturnType, out object mockedReturnValue, MethodBase method, Type[] methodGenericTypes, object[] args)
             {
-                return SubstituteManager.TryMock(actualType, instance, mockedReturnType, out mockedReturnValue, method, methodGenericTypes, args);
+                // TODO this is the slowest thing in the universe ...
+                var methodInfo = method.DeclaringType.GetMethods().First(m => m.MethodHandle == method.MethodHandle);
+                
+                if (!SubstituteManager.TryMock(actualType, instance, mockedReturnType, out mockedReturnValue, methodInfo, methodGenericTypes, args))
+                {
+                    var originalMethodDelegate = TryMockProxyGenerator.GetOriginalMethodDelegateFor(methodInfo);
+                    if(originalMethodDelegate != null)
+                        mockedReturnValue = originalMethodDelegate.DynamicInvoke(args);
+                }
+                
+                return true;
             }
 
             internal static SubstituteConfig? TryGetSubstituteConfig(ICallRouter callRouter)
@@ -116,13 +127,15 @@ namespace NSubstitute.Elevated.RuntimeInjection
             }
         }
 
-        struct DynamicMethodTrampolineDisposer : IDisposable
+        struct Trampoline : IDisposable
         {
+            readonly MethodInfo m_OriginalMethod;
             long m_OriginOffset;
             byte[] m_OriginalBytes;
 
-            public DynamicMethodTrampolineDisposer(long originOffset, byte[] originalBytes)
+            public Trampoline(MethodInfo originalMethod, long originOffset, byte[] originalBytes)
             {
+                m_OriginalMethod = originalMethod;
                 m_OriginOffset = originOffset;
                 m_OriginalBytes = originalBytes;
             }
@@ -130,12 +143,16 @@ namespace NSubstitute.Elevated.RuntimeInjection
             public void Dispose()
             {
                 MemoryUtilities.WriteBytes(m_OriginOffset, m_OriginalBytes);
+                
+                var tryMockProxyGenerator = ((RuntimeInjectionSupport.Context)SubstitutionContext.Current).TryMockProxyGenerator;
+                tryMockProxyGenerator.PurgeAllFor(m_OriginalMethod);
+
             }
         }
 
-        public static unsafe IDisposable InstallDynamicMethodTrampoline(MethodInfo staticMethod, MethodInfo dynamicMethod)
+        public static unsafe IDisposable InstallDynamicMethodTrampoline(MethodInfo originalMethod, MethodInfo dynamicMethod)
         {
-            var origin = GetAddressOfMethod(staticMethod);
+            var origin = GetAddressOfMethod(originalMethod);
             var dest = GetAddressOfMethod(dynamicMethod);
 
             var memory = origin;
@@ -180,7 +197,7 @@ namespace NSubstitute.Elevated.RuntimeInjection
 
             MemoryUtilities.ProtectMemoryPage(originOffset);
 
-            return new DynamicMethodTrampolineDisposer(originOffset, originalBytes);
+            return new Trampoline(originalMethod, originOffset, originalBytes);
         }
 
         static long GetAddressOfMethod(MethodInfo methodInfo)

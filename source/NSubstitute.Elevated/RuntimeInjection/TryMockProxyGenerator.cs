@@ -3,11 +3,18 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using System.Reflection.Emit;
+using Mono.Reflection;
 
 namespace NSubstitute.Elevated.RuntimeInjection {
     class TryMockProxyGenerator
     {
-        Dictionary<MethodInfo, Delegate> m_Cache = new Dictionary<MethodInfo, Delegate>(new MethodInfoComparer());
+        struct Proxies
+        {
+            public Delegate TryMockProxy;
+            public Delegate OriginalMethodProxy;
+        }
+        
+        Dictionary<MethodInfo, Proxies> m_Cache = new Dictionary<MethodInfo, Proxies>(new MethodInfoComparer());
 
         struct MethodInfoComparer : IEqualityComparer<MethodInfo>
         {
@@ -60,11 +67,157 @@ namespace NSubstitute.Elevated.RuntimeInjection {
             m_Cache.Clear();
         }
 
-        internal MethodInfo GetOrCreateTryMockProxyFor(MethodInfo methodInfo)
+        public void PurgeAllFor(MethodInfo originalMethod)
+        {
+            m_Cache.Remove(originalMethod);
+        }
+
+        internal void GenerateProxiesFor(MethodInfo methodInfo, bool generateOriginalMethodProxy)
+        {
+            if(m_Cache.ContainsKey(methodInfo))
+                return;
+            // TODO: are we leaking this?
+            m_Cache.Add(methodInfo, new Proxies
+            {
+                TryMockProxy = TryMockProxyFor(methodInfo),
+                OriginalMethodProxy = generateOriginalMethodProxy ? OriginalMethodProxyFor(methodInfo) : null
+            });
+        }
+
+        public Delegate GetTryMockProxydDelegateFor(MethodInfo methodInfo)
         {
             if (m_Cache.TryGetValue(methodInfo, out var @delegate))
-                return @delegate.GetMethodInfo();
+                return @delegate.TryMockProxy;
 
+            throw new InvalidOperationException();
+        }
+
+        public Delegate GetOriginalMethodDelegateFor(MethodInfo methodInfo)
+        {
+            if (m_Cache.TryGetValue(methodInfo, out var @delegate))
+                return @delegate.OriginalMethodProxy;
+
+            throw new InvalidOperationException();
+        }
+        
+        static Delegate OriginalMethodProxyFor(MethodInfo methodInfo)
+        {
+            var parameterInfos = methodInfo.GetParameters();
+            var dynamicMethod = new DynamicMethod(
+                $"{methodInfo.Name}_OriginalProxy_{methodInfo.GetHashCode()}",
+                methodInfo.Attributes,
+                methodInfo.CallingConvention,
+                methodInfo.ReturnType,
+                parameterInfos.Select(p => p.ParameterType).ToArray(),
+                methodInfo.Module,
+                true);
+
+            foreach (var parameterInfo in parameterInfos)
+            {
+                dynamicMethod.DefineParameter(parameterInfo.Position, parameterInfo.Attributes, parameterInfo.Name);
+            }
+
+            CopyMethod(methodInfo, dynamicMethod.GetILGenerator());
+            
+            return dynamicMethod.CreateDelegate(DelegateTypeFor(methodInfo));
+        }
+
+        static void CopyMethod(MethodInfo methodInfo, ILGenerator generator)
+        {
+            var body = methodInfo.GetMethodBody();
+
+            // 1. Declare all the variables
+            foreach (var localVariableInfo in body.LocalVariables)
+            {
+                generator.DeclareLocal(localVariableInfo.LocalType, localVariableInfo.IsPinned);
+            }
+            
+            // 2. Decompile the original method
+            var instructions = methodInfo.GetInstructions().ToArray();
+            
+            // 3. Labels
+            // Define labels for all the jump targets
+            var labels = new Dictionary<int, Label>();
+            foreach (var instr in instructions)
+            {
+                if (instr.Operand is Instruction instruction)
+                {
+                    var offset = instruction.Offset;
+                    if (!labels.ContainsKey(offset))
+                        labels.Add(offset, generator.DefineLabel());
+                }
+            }
+            
+            // 4. Copy the instructions
+            foreach (var instr in instructions)
+            {
+                var offset = instr.Offset;
+                
+                if(labels.TryGetValue(offset, out var targetLabel))
+                    generator.MarkLabel(targetLabel);
+
+                foreach (var ehc in body.ExceptionHandlingClauses)
+                {
+                    if (ehc.TryOffset == offset)
+                        generator.BeginExceptionBlock();
+                    else
+                    {
+                        switch (ehc.Flags)
+                        {
+                            case ExceptionHandlingClauseOptions.Clause:
+                                if (ehc.HandlerOffset == offset)
+                                    generator.BeginCatchBlock(ehc.CatchType);
+                                break;
+                            case ExceptionHandlingClauseOptions.Finally:
+                                if (ehc.HandlerOffset == offset)
+                                    generator.BeginFinallyBlock();
+                                break;
+                            
+                            case ExceptionHandlingClauseOptions.Fault:
+                                throw new NotImplementedException();
+                            case ExceptionHandlingClauseOptions.Filter:
+                                throw new NotImplementedException();
+                        }
+                    }
+                }
+
+                if (instr.Operand != null)
+                {
+                    if (instr.Operand is Instruction instrOperand)
+                    {
+                        var label = labels[instrOperand.Offset];
+                        generator.Emit(instr.OpCode, label);
+                    }
+                    else
+                    {
+                        var emitDelegate = generator.GetType().GetMethod("Emit", new[]
+                        {
+                            instr.OpCode.GetType(),
+                            instr.Operand.GetType()
+                        });
+
+                        emitDelegate.Invoke(generator, new object[]
+                        {
+                            instr.OpCode,
+                            instr.Operand
+                        });
+                    }
+                }
+                else
+                {
+                    generator.Emit(instr.OpCode);
+                }
+
+                foreach (var ehc in body.ExceptionHandlingClauses)
+                {
+                   if(ehc.TryOffset + ehc.TryLength == offset)
+                        generator.EndExceptionBlock();
+                }
+            }
+        }
+
+        static Delegate TryMockProxyFor(MethodInfo methodInfo)
+        {
             var parameterInfos = methodInfo.GetParameters();
             var dynamicMethod = new DynamicMethod(
                 $"{methodInfo.Name}_Proxy_{methodInfo.GetHashCode()}",
@@ -75,8 +228,14 @@ namespace NSubstitute.Elevated.RuntimeInjection {
                 methodInfo.Module,
                 true);
 
+            foreach (var parameterInfo in parameterInfos)
+            {
+                dynamicMethod.DefineParameter(parameterInfo.Position, parameterInfo.Attributes, parameterInfo.Name);
+            }
+
             var tryMockMethod = typeof(SubstituteManager).GetMethod(nameof(SubstituteManager.TryMockWrapper));
             var getTypeFromHandle = typeof(Type).GetMethod(nameof(Type.GetTypeFromHandle));
+            var getMethodFromHandle = typeof(MethodBase).GetMethod(nameof(MethodBase.GetMethodFromHandle), new[]{typeof(RuntimeMethodHandle)});
 
             var generator = dynamicMethod.GetILGenerator();
 
@@ -101,6 +260,10 @@ namespace NSubstitute.Elevated.RuntimeInjection {
             // var d = new Type[0];
             generator.Emit(OpCodes.Ldc_I4_0);
             generator.Emit(OpCodes.Newarr, typeof(Type));
+            
+            // methodInfo
+            generator.Emit(OpCodes.Ldtoken, methodInfo);
+            generator.Emit(OpCodes.Call, getMethodFromHandle);
 
             // Arguments
             // args = new[parameterInfos.Length];
@@ -114,13 +277,13 @@ namespace NSubstitute.Elevated.RuntimeInjection {
                 generator.Emit(OpCodes.Dup);
                 generator.Emit(OpCodes.Ldc_I4, index); // index
                 generator.Emit(OpCodes.Ldarg, index); // arg-index
-                if(parameterInfo.ParameterType.IsValueType)
+                if (parameterInfo.ParameterType.IsValueType)
                     generator.Emit(OpCodes.Box, parameterInfo.ParameterType);
                 generator.Emit(OpCodes.Stelem_Ref);
                 ++index;
             }
 
-            // ElevatedMockingSupport.TryMock(a, b, c, out returnValue, d, args);
+            // ElevatedMockingSupport.TryMock(a, b, c, out returnValue, d, methodInfo, args);
             generator.Emit(OpCodes.Call, tryMockMethod);
             generator.Emit(OpCodes.Pop);
 
@@ -138,17 +301,7 @@ namespace NSubstitute.Elevated.RuntimeInjection {
                 generator.Emit(OpCodes.Ret);
             }
 
-            foreach (var parameterInfo in parameterInfos)
-            {
-                dynamicMethod.DefineParameter(parameterInfo.Position, parameterInfo.Attributes, parameterInfo.Name);
-            }
-
-            @delegate = dynamicMethod.CreateDelegate(DelegateTypeFor(methodInfo));
-
-            m_Cache.Add(methodInfo, @delegate);
-            
-            // TODO: are we leaking this?
-            return @delegate.GetMethodInfo();
+            return dynamicMethod.CreateDelegate(DelegateTypeFor(methodInfo));
         }
 
         static Type DelegateTypeFor(MethodInfo methodInfo)
