@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using NSubstitute.Core;
 using NSubstitute.Elevated.WeaverInternals;
 using NSubstitute.Exceptions;
@@ -93,12 +95,32 @@ namespace NSubstitute.Elevated.RuntimeInjection
             return proxy;
         }
 
+        // returns true if a mock is in place and it is taking over functionality. instance may be null
+        // if static. mockedReturnValue is ignored in a void return func.
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public static bool TryMockWrapper(Type actualType, object instance, Type mockedReturnType, out object mockedReturnValue, Type[] methodGenericTypes, object[] args)
+        {
+            if (!(SubstitutionContext.Current is RuntimeInjectionSupport.Context context))
+            {
+                mockedReturnValue = mockedReturnType.GetDefaultValue();
+                return false;
+            }
+
+            var method = (MethodInfo) new StackTrace(1).GetFrame(0).GetMethod();
+
+            if (method.IsGenericMethodDefinition)
+                method = method.MakeGenericMethod(methodGenericTypes);
+
+            return context.TryMock(actualType, instance, mockedReturnType, out mockedReturnValue, method, methodGenericTypes, args);
+        }
+
+        
         object CreateStaticProxy(Type typeToProxy, ICallRouter callRouter)
         {
             var originalMethod = typeToProxy.GetMethod("ReturnArgument");
             var proxyUninstaller = RuntimeInjectionSupport.InstallDynamicMethodTrampoline(
-                originalMethod, 
-                RuntimeInjectionSupport.GetOrCreateProxyFor(originalMethod));
+                originalMethod,
+                ((RuntimeInjectionSupport.Context)SubstitutionContext.Current).TryMockProxyGenerator.GetOrCreateTryMockProxyFor(originalMethod));
             
             var field = GetStaticRouterField(typeToProxy);
             if (field.GetValue(null) != null)
