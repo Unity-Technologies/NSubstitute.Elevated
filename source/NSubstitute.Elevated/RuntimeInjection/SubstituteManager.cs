@@ -151,6 +151,10 @@ namespace NSubstitute.Elevated.RuntimeInjection
 
             if (!methodInfo.IsStatic)
                 return false;
+
+            // TODO implement out args
+            if (methodInfo.GetParameters().Any(p => p.IsOut))
+                return false;
             
             return true;
         }
