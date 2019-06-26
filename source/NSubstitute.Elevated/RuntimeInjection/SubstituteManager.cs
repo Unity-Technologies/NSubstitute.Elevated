@@ -129,22 +129,13 @@ namespace NSubstitute.Elevated.RuntimeInjection
                     Console.WriteLine($"Method {originalMethod.DeclaringType.FullName}::{originalMethod.Name} is not being mocked");
             }
             
-            
-            var field = GetStaticRouterField(typeToProxy);
-            if (field.GetValue(null) != null)
-                throw new SubstituteException("Cannot substitute the same type twice (did you forget to Dispose() your previous substitute?)");
-
-            field.SetValue(null, callRouter);
+            var cache = ((RuntimeInjectionSupport.Context)SubstitutionContext.Current).CallRouterCache;
+            cache.AddCallRouterForStatic(typeToProxy, callRouter);
 
             return new SubstituteStatic.Proxy(new DelegateDisposable(() =>
             {
-                var found = field.GetValue(null);
-                if (found == null)
-                    throw new SubstituteException("Unexpected static unmock of an already-unmocked type");
-                if (found != callRouter)
-                    throw new SubstituteException("Discovered unexpected call router attached in static mock context");
-
-                field.SetValue(null, null);
+                cache.RemoveCallRouterForStatic(typeToProxy);
+                
                 foreach (var trampoline in trampolines)
                 {
                     trampoline.Dispose();
@@ -168,8 +159,18 @@ namespace NSubstitute.Elevated.RuntimeInjection
         // false means that the original implementation should run.
         public bool TryMock(Type actualType, object instance, Type mockedReturnType, out object mockedReturnValue, MethodInfo method, Type[] methodGenericTypes, object[] args)
         {
-            var field = instance == null ? GetStaticRouterField(actualType) : GetRouterField(actualType);
-            var callRouter = (ICallRouter)field?.GetValue(instance);
+            ICallRouter callRouter;
+            if (instance == null)
+            {
+                // This is a static method. We store the call router in a global cache, where the key is the type.
+                var cache = ((RuntimeInjectionSupport.Context)SubstitutionContext.Current).CallRouterCache;
+                callRouter = cache.CallRouterForStatic(actualType);
+            }
+            else
+            {
+                var field = GetRouterField(actualType);
+                callRouter = (ICallRouter)field?.GetValue(instance);
+            }
 
             if (callRouter != null)
             {
@@ -190,7 +191,7 @@ namespace NSubstitute.Elevated.RuntimeInjection
         //   2. support for struct instances (only possible to associate call routers with individual structs from the inside)
         //   3. is a simple way to check that a type has been patched
         //
-        FieldInfo GetStaticRouterField(Type type) => m_RouterStaticFieldCache.GetOrAdd(type, t => GetRouterField(t, Weaver.MockInjector.InjectedMockStaticDataName, BindingFlags.Static));
+        //FieldInfo GetStaticRouterField(Type type) => m_RouterStaticFieldCache.GetOrAdd(type, t => GetRouterField(t, Weaver.MockInjector.InjectedMockStaticDataName, BindingFlags.Static));
         FieldInfo GetRouterField(Type type) => m_RouterFieldCache.GetOrAdd(type, t => GetRouterField(t, Weaver.MockInjector.InjectedMockDataName, BindingFlags.Instance));
 
         static FieldInfo GetRouterField(IReflect type, string fieldName, BindingFlags bindingFlags)

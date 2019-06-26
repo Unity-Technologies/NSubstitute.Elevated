@@ -8,8 +8,6 @@ namespace NSubstitute.Elevated.Tests
 {
     class StaticClass
     {
-        static object __mock__staticData;
-        
         [MethodImpl(MethodImplOptions.NoInlining)]
         public static int ReturnArgument(int i)
         {

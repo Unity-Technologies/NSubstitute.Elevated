@@ -11,6 +11,30 @@ using Unity.Core;
 
 namespace NSubstitute.Elevated.RuntimeInjection
 {
+    class CallRouterCache
+    {
+        Dictionary<Type, ICallRouter> m_CallRoutersCacheForStatics = new Dictionary<Type, ICallRouter>();
+
+        public ICallRouter CallRouterForStatic(Type type)
+        {
+            return m_CallRoutersCacheForStatics.TryGetValue(type, out var callRouter) ? callRouter : null;
+        }
+        public void Purge()
+        {
+            m_CallRoutersCacheForStatics.Clear();
+        }
+
+        public void AddCallRouterForStatic(Type type, ICallRouter callRouter)
+        {
+            m_CallRoutersCacheForStatics.Add(type, callRouter);
+        }
+
+        public void RemoveCallRouterForStatic(Type type)
+        {
+            m_CallRoutersCacheForStatics.Remove(type);
+        }
+    }
+    
     class RuntimeInjectionSupport
     {
         internal class Context : ISubstitutionContext
@@ -19,6 +43,7 @@ namespace NSubstitute.Elevated.RuntimeInjection
             readonly ISubstituteFactory m_ElevatedSubstituteFactory;
 
             public TryMockProxyGenerator TryMockProxyGenerator { get; } = new TryMockProxyGenerator();
+            public CallRouterCache CallRouterCache { get; } = new CallRouterCache();
 
             // ReSharper disable once MemberCanBePrivate.Global
             internal Context(ISubstitutionContext forwarder)
@@ -223,6 +248,8 @@ namespace NSubstitute.Elevated.RuntimeInjection
                     throw new SubstituteException("Unexpected hook in place of ours");
                 
                 thisContext.TryMockProxyGenerator.Purge();
+                thisContext.CallRouterCache.Purge();
+                
                 SubstitutionContext.Current = hookedContext;
             });
         }
