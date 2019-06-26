@@ -14,14 +14,11 @@ namespace NSubstitute.Elevated.RuntimeInjection
     class CallRouterCache
     {
         Dictionary<Type, ICallRouter> m_CallRoutersCacheForStatics = new Dictionary<Type, ICallRouter>();
+        Dictionary<object, ICallRouter> m_CallRoutersCacheForInstance = new Dictionary<object, ICallRouter>();
 
         public ICallRouter CallRouterForStatic(Type type)
         {
             return m_CallRoutersCacheForStatics.TryGetValue(type, out var callRouter) ? callRouter : null;
-        }
-        public void Purge()
-        {
-            m_CallRoutersCacheForStatics.Clear();
         }
 
         public void AddCallRouterForStatic(Type type, ICallRouter callRouter)
@@ -32,6 +29,27 @@ namespace NSubstitute.Elevated.RuntimeInjection
         public void RemoveCallRouterForStatic(Type type)
         {
             m_CallRoutersCacheForStatics.Remove(type);
+        }
+
+        public ICallRouter CallRouterForInstance(object instance)
+        {
+            return m_CallRoutersCacheForInstance.TryGetValue(instance, out var callRouter) ? callRouter : null;
+        }
+
+        public void AddCallRouterForInstance(object instance, ICallRouter callRouter)
+        {
+            m_CallRoutersCacheForInstance.Add(instance, callRouter);
+        }
+
+        public void RemoveCallRouterForInstance(object instance)
+        {
+            m_CallRoutersCacheForInstance.Remove(instance);
+        }
+        
+        public void Purge()
+        {
+            m_CallRoutersCacheForStatics.Clear();
+            m_CallRoutersCacheForInstance.Clear();
         }
     }
     

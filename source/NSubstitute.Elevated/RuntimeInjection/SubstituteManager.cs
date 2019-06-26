@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
@@ -79,7 +78,9 @@ namespace NSubstitute.Elevated.RuntimeInjection
                 }
 
                 proxy = Activator.CreateInstance(typeToProxy, constructorArguments);
-                GetRouterField(proxy.GetType()).SetValue(proxy, callRouter);
+                
+                var cache = context.CallRouterCache;
+                cache.AddCallRouterForInstance(proxy, callRouter);
             }
 
             return proxy;
@@ -158,16 +159,19 @@ namespace NSubstitute.Elevated.RuntimeInjection
         public bool TryMock(Type actualType, object instance, Type mockedReturnType, out object mockedReturnValue, MethodInfo method, Type[] methodGenericTypes, object[] args)
         {
             ICallRouter callRouter;
+            var cache = ((RuntimeInjectionSupport.Context)SubstitutionContext.Current).CallRouterCache;
+            
             if (instance == null)
             {
                 // This is a static method. We store the call router in a global cache, where the key is the type.
-                var cache = ((RuntimeInjectionSupport.Context)SubstitutionContext.Current).CallRouterCache;
                 callRouter = cache.CallRouterForStatic(actualType);
             }
             else
             {
-                var field = GetRouterField(actualType);
-                callRouter = (ICallRouter)field?.GetValue(instance);
+                if(actualType.IsValueType)
+                    throw new NotSupportedException("TryMock is not supported on value types.");
+                else
+                    callRouter = cache.CallRouterForInstance(instance);
             }
 
             if (callRouter != null)
@@ -182,29 +186,5 @@ namespace NSubstitute.Elevated.RuntimeInjection
             mockedReturnValue = mockedReturnType.GetDefaultValue();
             return false;
         }
-
-        // motivation for router mapping being stored with the type/instance:
-        //
-        //   1. avoid problem of "gc leak vs. substitute requires disposal" by storing the router link in the instance
-        //   2. support for struct instances (only possible to associate call routers with individual structs from the inside)
-        //   3. is a simple way to check that a type has been patched
-        //
-        //FieldInfo GetStaticRouterField(Type type) => m_RouterStaticFieldCache.GetOrAdd(type, t => GetRouterField(t, Weaver.MockInjector.InjectedMockStaticDataName, BindingFlags.Static));
-        FieldInfo GetRouterField(Type type) => m_RouterFieldCache.GetOrAdd(type, t => GetRouterField(t, Weaver.MockInjector.InjectedMockDataName, BindingFlags.Instance));
-
-        static FieldInfo GetRouterField(IReflect type, string fieldName, BindingFlags bindingFlags)
-        {
-            var field = type.GetField(fieldName, bindingFlags | BindingFlags.NonPublic);
-            if (field == null)
-                throw new SubstituteException("Cannot substitute for non-patched types");
-
-            if (field.FieldType != typeof(object))
-                throw new SubstituteException("Unexpected mock data type found on patched type");
-
-            return field;
-        }
-
-        readonly Dictionary<Type, FieldInfo> m_RouterStaticFieldCache = new Dictionary<Type, FieldInfo>();
-        readonly Dictionary<Type, FieldInfo> m_RouterFieldCache = new Dictionary<Type, FieldInfo>();
     }
 }

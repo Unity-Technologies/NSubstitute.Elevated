@@ -1,7 +1,6 @@
 using System;
 using System.Runtime.CompilerServices;
 using NSubstitute.Elevated.RuntimeInjection;
-using NSubstitute.Elevated.WeaverInternals;
 using NUnit.Framework;
 using Shouldly;
 
@@ -132,8 +131,6 @@ namespace NSubstitute.Elevated.Tests
 
         class TestClass
         {
-            private object __mock__data;
-
             public int Field;
 
             [MethodImpl(MethodImplOptions.NoInlining)]
