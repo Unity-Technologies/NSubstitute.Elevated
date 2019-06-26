@@ -38,13 +38,13 @@ namespace NSubstitute.Elevated.Tests
     {
         IDisposable m_Dispose;
 
-        [OneTimeSetUp]
+        [SetUp]
         public void Setup()
         {
             m_Dispose = RuntimeInjectionSupport.AutoHook();
         }
 
-        [OneTimeTearDown]
+        [TearDown]
         public void TearDown()
         {
             m_Dispose.Dispose();
@@ -150,6 +150,17 @@ namespace NSubstitute.Elevated.Tests
 
             testClassMocked.SetFieldAndReturn(10).Returns(5);
             testClassMocked.SetFieldAndReturn(10).ShouldBe(5);
+        }
+        
+        [Test]
+        public void InstanceMethodWorksWithForParsOf()
+        {
+            var testClassMocked = Substitute.ForPartsOf<TestClass>();
+
+            testClassMocked.SetFieldAndReturn(10).Returns(5);
+            testClassMocked.SetFieldAndReturn(10).ShouldBe(5);
+            
+            testClassMocked.SetFieldAndReturn(15).ShouldBe(15);
         }
     }
 }
