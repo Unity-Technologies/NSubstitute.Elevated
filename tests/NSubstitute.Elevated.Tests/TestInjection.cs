@@ -141,6 +141,18 @@ namespace NSubstitute.Elevated.Tests
             {
                 return Field = value;
             }
+
+            [MethodImpl(MethodImplOptions.NoInlining)]
+            public int MethodThatCallsMethod(int value)
+            {
+                return ReturnMe(value);
+            }
+            
+            [MethodImpl(MethodImplOptions.NoInlining)]
+            public int ReturnMe(int value)
+            {
+                return value;
+            }
         }
         
         [Test]
@@ -161,6 +173,17 @@ namespace NSubstitute.Elevated.Tests
             testClassMocked.SetFieldAndReturn(10).ShouldBe(5);
             
             testClassMocked.SetFieldAndReturn(15).ShouldBe(15);
+        }
+        
+        [Test]
+        public void InstanceMethodWorksWithForParsOfCallingAnotherInstanceMethod()
+        {
+            var testClassMocked = Substitute.ForPartsOf<TestClass>();
+
+            testClassMocked.MethodThatCallsMethod(10).Returns(5);
+            testClassMocked.MethodThatCallsMethod(10).ShouldBe(5);
+            
+            testClassMocked.MethodThatCallsMethod(15).ShouldBe(15);
         }
     }
 }
