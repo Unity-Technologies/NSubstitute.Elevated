@@ -41,6 +41,7 @@ namespace NSubstitute.Elevated.RuntimeInjection
         {
             readonly ISubstitutionContext m_Forwarder;
             readonly ISubstituteFactory m_ElevatedSubstituteFactory;
+            readonly List<IDisposable> m_Trampolines = new List<IDisposable>();
 
             public TryMockProxyGenerator TryMockProxyGenerator { get; } = new TryMockProxyGenerator();
             public CallRouterCache CallRouterCache { get; } = new CallRouterCache();
@@ -55,6 +56,21 @@ namespace NSubstitute.Elevated.RuntimeInjection
             }
 
             SubstituteManager SubstituteManager { get; }
+
+            public void AddTrampoline(IDisposable trampoline)
+            {
+                m_Trampolines.Add(trampoline);
+            }
+
+            public void UnInstallTrampolines()
+            {
+                foreach (var trampoline in m_Trampolines)
+                {
+                    trampoline.Dispose();
+                }
+                
+                m_Trampolines.Clear();
+            }
 
             class ElevatedCallRouterFactory : ICallRouterFactory
             {
@@ -261,6 +277,8 @@ namespace NSubstitute.Elevated.RuntimeInjection
             {
                 if (SubstitutionContext.Current != thisContext)
                     throw new SubstituteException("Unexpected hook in place of ours");
+
+                thisContext.UnInstallTrampolines();
                 
                 thisContext.TryMockProxyGenerator.Purge();
                 thisContext.CallRouterCache.Purge();

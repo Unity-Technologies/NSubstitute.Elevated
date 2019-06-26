@@ -59,35 +59,17 @@ namespace NSubstitute.Elevated.RuntimeInjection
                 // by definition, go through a runtime dynamic proxy generator that could add such things.
                 if (additionalInterfaces.Any())
                     throw new SubstituteException("Cannot add interfaces at runtime to patched types");
-
-//                switch (substituteConfig) {
-//                    case SubstituteConfig.OverrideAllCalls:
-//
-//                        // overriding all calls includes the ctor, so it makes no sense for the user to pass in ctor args
-//                        if (constructorArguments != null && constructorArguments.Any())
-//                            throw new SubstituteException("Do not pass ctor args when substituting with elevated mocks (or did you mean to use ForPartsOf?)");
-//
-//                        // but we use a ctor arg to select the special empty ctor that we patched in
-//                        constructorArguments = k_MockedCtorParams;
-//                        break;
-//                    case SubstituteConfig.CallBaseByDefault:
-//                        var castleDynamicProxyFactory = new CastleDynamicProxyFactory();
-//                        return castleDynamicProxyFactory.GenerateProxy(callRouter, typeToProxy, additionalInterfaces, constructorArguments);
-//                    default:
-//                        throw new ArgumentOutOfRangeException();
-//                }
                 
-                // TODO fix
-                var trampolines = new List<IDisposable>();
-
+                var context = ((RuntimeInjectionSupport.Context)SubstitutionContext.Current);
+                
                 foreach (var originalMethod in typeToProxy.GetMethods())
                 {
                     if (CanMock(originalMethod))
                     {
-                        var tryMockProxyGenerator = ((RuntimeInjectionSupport.Context)SubstitutionContext.Current).TryMockProxyGenerator;
+                        var tryMockProxyGenerator = context.TryMockProxyGenerator;
                         tryMockProxyGenerator.GenerateProxiesFor(originalMethod, substituteConfig == SubstituteConfig.CallBaseByDefault);
                     
-                        trampolines.Add(
+                        context.AddTrampoline(
                             RuntimeInjectionSupport.InstallDynamicMethodTrampoline(
                                 originalMethod,
                                 tryMockProxyGenerator.GetTryMockProxydDelegateFor(originalMethod).GetMethodInfo()));
@@ -98,22 +80,6 @@ namespace NSubstitute.Elevated.RuntimeInjection
 
                 proxy = Activator.CreateInstance(typeToProxy, constructorArguments);
                 GetRouterField(proxy.GetType()).SetValue(proxy, callRouter);
-            
-                //var cache = ((RuntimeInjectionSupport.Context)SubstitutionContext.Current).CallRouterCache;
-                //cache.AddCallRouterForStatic(typeToProxy, callRouter);
-
-                /*
-                proxy = new SubstituteStatic.Proxy(new DelegateDisposable(() =>
-                {
-                    cache.RemoveCallRouterForStatic(typeToProxy);
-                
-                    foreach (var trampoline in trampolines)
-                    {
-                        trampoline.Dispose();
-                    }
-                    trampolines.Clear();
-                }));
-                */
             }
 
             return proxy;
@@ -136,16 +102,15 @@ namespace NSubstitute.Elevated.RuntimeInjection
 
         object CreateStaticProxy(Type typeToProxy, ICallRouter callRouter, bool callBaseByDefault)
         {
-            var trampolines = new List<IDisposable>();
-
+            var context = ((RuntimeInjectionSupport.Context)SubstitutionContext.Current);
             foreach (var originalMethod in typeToProxy.GetMethods())
             {
                 if (CanMock(originalMethod))
                 {
-                    var tryMockProxyGenerator = ((RuntimeInjectionSupport.Context)SubstitutionContext.Current).TryMockProxyGenerator;
+                    var tryMockProxyGenerator = context.TryMockProxyGenerator;
                     tryMockProxyGenerator.GenerateProxiesFor(originalMethod, callBaseByDefault);
                     
-                    trampolines.Add(
+                    context.AddTrampoline(
                         RuntimeInjectionSupport.InstallDynamicMethodTrampoline(
                             originalMethod,
                             tryMockProxyGenerator.GetTryMockProxydDelegateFor(originalMethod).GetMethodInfo()));
@@ -154,18 +119,14 @@ namespace NSubstitute.Elevated.RuntimeInjection
                     Console.WriteLine($"Method {originalMethod.DeclaringType.FullName}::{originalMethod.Name} is not being mocked");
             }
             
-            var cache = ((RuntimeInjectionSupport.Context)SubstitutionContext.Current).CallRouterCache;
+            var cache = context.CallRouterCache;
             cache.AddCallRouterForStatic(typeToProxy, callRouter);
 
             return new SubstituteStatic.Proxy(new DelegateDisposable(() =>
             {
                 cache.RemoveCallRouterForStatic(typeToProxy);
                 
-                foreach (var trampoline in trampolines)
-                {
-                    trampoline.Dispose();
-                }
-                trampolines.Clear();
+                context.UnInstallTrampolines();
             }));
         }
 
