@@ -55,40 +55,65 @@ namespace NSubstitute.Elevated.RuntimeInjection
             }
             else
             {
-                /*
                 // requests for additional interfaces on patched types cannot be done at runtime. elevated mocking can't,
                 // by definition, go through a runtime dynamic proxy generator that could add such things.
                 if (additionalInterfaces.Any())
                     throw new SubstituteException("Cannot add interfaces at runtime to patched types");
 
-                switch (substituteConfig) {
-                    case SubstituteConfig.OverrideAllCalls:
+//                switch (substituteConfig) {
+//                    case SubstituteConfig.OverrideAllCalls:
+//
+//                        // overriding all calls includes the ctor, so it makes no sense for the user to pass in ctor args
+//                        if (constructorArguments != null && constructorArguments.Any())
+//                            throw new SubstituteException("Do not pass ctor args when substituting with elevated mocks (or did you mean to use ForPartsOf?)");
+//
+//                        // but we use a ctor arg to select the special empty ctor that we patched in
+//                        constructorArguments = k_MockedCtorParams;
+//                        break;
+//                    case SubstituteConfig.CallBaseByDefault:
+//                        var castleDynamicProxyFactory = new CastleDynamicProxyFactory();
+//                        return castleDynamicProxyFactory.GenerateProxy(callRouter, typeToProxy, additionalInterfaces, constructorArguments);
+//                    default:
+//                        throw new ArgumentOutOfRangeException();
+//                }
+                
+                // TODO fix
+                var trampolines = new List<IDisposable>();
 
-                        // overriding all calls includes the ctor, so it makes no sense for the user to pass in ctor args
-                        if (constructorArguments != null && constructorArguments.Any())
-                            throw new SubstituteException("Do not pass ctor args when substituting with elevated mocks (or did you mean to use ForPartsOf?)");
-
-                        // but we use a ctor arg to select the special empty ctor that we patched in
-                        constructorArguments = k_MockedCtorParams;
-                        break;
-                    case SubstituteConfig.CallBaseByDefault:
-                        var castleDynamicProxyFactory = new CastleDynamicProxyFactory();
-                        return castleDynamicProxyFactory.GenerateProxy(callRouter, typeToProxy, additionalInterfaces, constructorArguments);
-                    case null:
-                        break;
-                    default:
-                        throw new ArgumentOutOfRangeException();
+                foreach (var originalMethod in typeToProxy.GetMethods())
+                {
+                    if (CanMock(originalMethod))
+                    {
+                        var tryMockProxyGenerator = ((RuntimeInjectionSupport.Context)SubstitutionContext.Current).TryMockProxyGenerator;
+                        tryMockProxyGenerator.GenerateProxiesFor(originalMethod, substituteConfig == SubstituteConfig.CallBaseByDefault);
+                    
+                        trampolines.Add(
+                            RuntimeInjectionSupport.InstallDynamicMethodTrampoline(
+                                originalMethod,
+                                tryMockProxyGenerator.GetTryMockProxydDelegateFor(originalMethod).GetMethodInfo()));
+                    }
+                    else
+                        Console.WriteLine($"Method {originalMethod.DeclaringType.FullName}::{originalMethod.Name} is not being mocked");
                 }
-
-//                var proxyWrap = Activator.CreateInstanceFrom(patchAllDependentAssemblies[1].Path, typeToProxy.FullName, false,
-//                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.CreateInstance, null,
-//                    constructorArguments, null, null);
-//                proxy = proxyWrap.Unwrap();
 
                 proxy = Activator.CreateInstance(typeToProxy, constructorArguments);
                 GetRouterField(proxy.GetType()).SetValue(proxy, callRouter);
+            
+                //var cache = ((RuntimeInjectionSupport.Context)SubstitutionContext.Current).CallRouterCache;
+                //cache.AddCallRouterForStatic(typeToProxy, callRouter);
+
+                /*
+                proxy = new SubstituteStatic.Proxy(new DelegateDisposable(() =>
+                {
+                    cache.RemoveCallRouterForStatic(typeToProxy);
+                
+                    foreach (var trampoline in trampolines)
+                    {
+                        trampoline.Dispose();
+                    }
+                    trampolines.Clear();
+                }));
                 */
-                throw new NotImplementedException();
             }
 
             return proxy;
@@ -146,14 +171,22 @@ namespace NSubstitute.Elevated.RuntimeInjection
 
         static bool CanMock(MethodInfo methodInfo)
         {
-            if (methodInfo.GetGenericArguments().Length > 0)
+            if (methodInfo.IsVirtual)
                 return false;
 
-            if (!methodInfo.IsStatic)
+            // TODO implement icalls
+            if (methodInfo.GetMethodBody() == null)
+                return false;
+            
+            if (methodInfo.GetGenericArguments().Length > 0)
                 return false;
 
             // TODO implement out args
             if (methodInfo.GetParameters().Any(p => p.IsOut))
+                return false;
+
+            // TODO constructor support
+            if (methodInfo.IsConstructor)
                 return false;
             
             return true;

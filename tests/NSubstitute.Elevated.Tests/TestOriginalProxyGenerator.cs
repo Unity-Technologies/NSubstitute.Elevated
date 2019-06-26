@@ -5,7 +5,7 @@ using NUnit.Framework;
 
 namespace NSubstitute.Elevated.Tests
 {
-    public class TestMethodCopier
+    public class TestOriginalProxyGenerator
     {
         public static int SimpleMethod(int a, int b)
         {
@@ -53,7 +53,7 @@ namespace NSubstitute.Elevated.Tests
         public void CanCopySimpleMethod()
         {
             var methodInfo = GetType().GetMethod(nameof(SimpleMethod));
-            var copy = MethodCopier.CopyMethod(methodInfo, $"{methodInfo.Name}_{methodInfo.MethodHandle.Value}");
+            var copy = OriginalProxyGenerator.GenerateProxy(methodInfo, $"{methodInfo.Name}_{methodInfo.MethodHandle.Value}");
             
             AssertMethodSignature(methodInfo, copy);
 
@@ -75,7 +75,7 @@ namespace NSubstitute.Elevated.Tests
         public void CanCopyMethodWithBranches()
         {
             var methodInfo = GetType().GetMethod(nameof(WithBranches));
-            var copy = MethodCopier.CopyMethod(methodInfo, $"{methodInfo.Name}_{methodInfo.MethodHandle.Value}");
+            var copy = OriginalProxyGenerator.GenerateProxy(methodInfo, $"{methodInfo.Name}_{methodInfo.MethodHandle.Value}");
             
             AssertMethodSignature(methodInfo, copy);
 
@@ -90,7 +90,7 @@ namespace NSubstitute.Elevated.Tests
         public void CanCopyMethodWithDeepBranches()
         {
             var methodInfo = GetType().GetMethod(nameof(WithDeepBranches));
-            var copy = MethodCopier.CopyMethod(methodInfo, $"{methodInfo.Name}_{methodInfo.MethodHandle.Value}");
+            var copy = OriginalProxyGenerator.GenerateProxy(methodInfo, $"{methodInfo.Name}_{methodInfo.MethodHandle.Value}");
             
             AssertMethodSignature(methodInfo, copy);
 
@@ -106,7 +106,7 @@ namespace NSubstitute.Elevated.Tests
         public void CanCopyMethodWithExceptions()
         {
             var methodInfo = GetType().GetMethod(nameof(WithTryCatch));
-            var copy = MethodCopier.CopyMethod(methodInfo, $"{methodInfo.Name}_{methodInfo.MethodHandle.Value}");
+            var copy = OriginalProxyGenerator.GenerateProxy(methodInfo, $"{methodInfo.Name}_{methodInfo.MethodHandle.Value}");
             
             AssertMethodSignature(methodInfo, copy);
 

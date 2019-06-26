@@ -102,7 +102,7 @@ namespace NSubstitute.Elevated.RuntimeInjection {
         
         static Delegate OriginalMethodProxyFor(MethodInfo methodInfo)
         {
-            var dynamicMethod = MethodCopier.CopyMethod(methodInfo, $"{methodInfo.Name}_OriginalProxy_{methodInfo.GetHashCode()}");
+            var dynamicMethod = OriginalProxyGenerator.GenerateProxy(methodInfo, $"{methodInfo.Name}_OriginalProxy_{methodInfo.GetHashCode()}");
 
             return dynamicMethod.CreateDelegate(DelegateTypeFor(methodInfo));
         }
@@ -112,17 +112,17 @@ namespace NSubstitute.Elevated.RuntimeInjection {
             var parameterInfos = methodInfo.GetParameters();
             var dynamicMethod = new DynamicMethod(
                 $"{methodInfo.Name}_Proxy_{methodInfo.GetHashCode()}",
-                methodInfo.Attributes,
-                methodInfo.CallingConvention,
+                methodInfo.Attributes | MethodAttributes.Static,
+                CallingConventions.HasThis,
                 methodInfo.ReturnType,
-                parameterInfos.Select(p => p.ParameterType).ToArray(),
+                ParameterTypesFor(methodInfo).ToArray(),
                 methodInfo.Module,
                 true);
 
-            foreach (var parameterInfo in parameterInfos)
-            {
-                dynamicMethod.DefineParameter(parameterInfo.Position, parameterInfo.Attributes, parameterInfo.Name);
-            }
+//            foreach (var parameterInfo in parameterInfos)
+//            {
+//                dynamicMethod.DefineParameter(parameterInfo.Position, parameterInfo.Attributes, parameterInfo.Name);
+//            }
 
             var tryMockMethod = typeof(SubstituteManager).GetMethod(nameof(SubstituteManager.TryMockWrapper));
             var getTypeFromHandle = typeof(Type).GetMethod(nameof(Type.GetTypeFromHandle));
@@ -137,8 +137,11 @@ namespace NSubstitute.Elevated.RuntimeInjection {
             generator.Emit(OpCodes.Ldtoken, methodInfo.DeclaringType);
             generator.Emit(OpCodes.Call, getTypeFromHandle);
 
-            // var b = null;
-            generator.Emit(OpCodes.Ldnull);
+            // var b = null || instance;
+            if (methodInfo.IsStatic)
+                generator.Emit(OpCodes.Ldnull);
+            else
+                generator.Emit(OpCodes.Ldarg_0);
 
             // var c = typeof(methodInfo.ReturnType);
             generator.Emit(OpCodes.Ldtoken, methodInfo.ReturnType);
@@ -162,16 +165,20 @@ namespace NSubstitute.Elevated.RuntimeInjection {
             generator.Emit(OpCodes.Newarr, typeof(object));
 
             var index = 0;
+            var argIndex = 0;
+            if (!methodInfo.IsStatic) argIndex += 1;
+
             foreach (var parameterInfo in parameterInfos)
             {
                 // args[index] = (object) arg;
                 generator.Emit(OpCodes.Dup);
                 generator.Emit(OpCodes.Ldc_I4, index); // index
-                generator.Emit(OpCodes.Ldarg, index); // arg-index
+                generator.Emit(OpCodes.Ldarg, argIndex); // arg-index
                 if (parameterInfo.ParameterType.IsValueType)
                     generator.Emit(OpCodes.Box, parameterInfo.ParameterType);
                 generator.Emit(OpCodes.Stelem_Ref);
                 ++index;
+                ++argIndex;
             }
 
             // ElevatedMockingSupport.TryMock(a, b, c, out returnValue, d, methodInfo, args);
@@ -195,16 +202,28 @@ namespace NSubstitute.Elevated.RuntimeInjection {
             return dynamicMethod.CreateDelegate(DelegateTypeFor(methodInfo));
         }
 
+        static IEnumerable<Type> ParameterTypesFor(MethodInfo methodInfo)
+        {
+            if (!methodInfo.IsStatic)
+                yield return methodInfo.DeclaringType;
+
+            foreach (var parameterInfo in methodInfo.GetParameters())
+                yield return parameterInfo.ParameterType;
+        }
+
         static Type DelegateTypeFor(MethodInfo methodInfo)
         {
             var type = BaseDelegateTypeFor(methodInfo);
-            
+
             return type.MakeGenericType(GenericArgumentsFor(methodInfo).ToArray());
         }
 
         static Type BaseDelegateTypeFor(MethodInfo methodInfo)
         {
             var parametersCount = methodInfo.GetParameters().Length;
+            if (!methodInfo.IsStatic)
+                parametersCount += 1;
+            
             if (methodInfo.ReturnType == typeof(void))
             {
                 switch (parametersCount)
@@ -257,6 +276,9 @@ namespace NSubstitute.Elevated.RuntimeInjection {
 
         static IEnumerable<Type> GenericArgumentsFor(MethodInfo methodInfo)
         {
+            if (!methodInfo.IsStatic)
+                yield return methodInfo.DeclaringType;
+            
             foreach (var parameterInfo in methodInfo.GetParameters())
                 yield return parameterInfo.ParameterType;
 

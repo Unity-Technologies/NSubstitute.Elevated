@@ -1,6 +1,7 @@
 using System;
 using System.Runtime.CompilerServices;
 using NSubstitute.Elevated.RuntimeInjection;
+using NSubstitute.Elevated.WeaverInternals;
 using NUnit.Framework;
 using Shouldly;
 
@@ -127,6 +128,28 @@ namespace NSubstitute.Elevated.Tests
                 
                 DateTime.Now.ShouldBe(new DateTime(1983, 6, 29));
             }
+        }
+
+        class TestClass
+        {
+            private object __mock__data;
+
+            public int Field;
+
+            [MethodImpl(MethodImplOptions.NoInlining)]
+            public int SetFieldAndReturn(int value)
+            {
+                return Field = value;
+            }
+        }
+        
+        [Test]
+        public void InstanceMethodWorks()
+        {
+            var testClassMocked = Substitute.For<TestClass>();
+
+            testClassMocked.SetFieldAndReturn(10).Returns(5);
+            testClassMocked.SetFieldAndReturn(10).ShouldBe(5);
         }
     }
 }

@@ -5,7 +5,7 @@ using System.Reflection;
 using System.Reflection.Emit;
 using Mono.Reflection;
 
-static internal class MethodCopier
+static internal class OriginalProxyGenerator
 {
     struct ExceptionHandler
     {
@@ -17,7 +17,7 @@ static internal class MethodCopier
         public int HandlerEnd;
     }
     
-    public static DynamicMethod CopyMethod(MethodInfo methodInfo, string newName)
+    public static DynamicMethod GenerateProxy(MethodInfo methodInfo, string newName)
     {
         var parameterInfos = methodInfo.GetParameters();
         var dynamicMethod = new DynamicMethod(
@@ -25,19 +25,28 @@ static internal class MethodCopier
             methodInfo.Attributes,
             methodInfo.CallingConvention,
             methodInfo.ReturnType,
-            parameterInfos.Select(p => p.ParameterType).ToArray(),
+            ParameterTypesFor(methodInfo).ToArray(),
             methodInfo.Module,
             true);
 
-        foreach (var parameterInfo in parameterInfos)
-        {
-            dynamicMethod.DefineParameter(parameterInfo.Position, parameterInfo.Attributes, parameterInfo.Name);
-        }
+        //foreach (var parameterInfo in parameterInfos)
+        //{
+        //    dynamicMethod.DefineParameter(parameterInfo.Position, parameterInfo.Attributes, parameterInfo.Name);
+        //}
 
-        MethodCopier.CopyMethodBody(methodInfo, dynamicMethod.GetILGenerator());
+        CopyMethodBody(methodInfo, dynamicMethod.GetILGenerator());
         return dynamicMethod;
     }
-    
+
+    static IEnumerable<Type> ParameterTypesFor(MethodInfo methodInfo)
+    {
+        if (!methodInfo.IsStatic)
+            yield return methodInfo.DeclaringType;
+
+        foreach (var parameterInfo in methodInfo.GetParameters())
+            yield return parameterInfo.ParameterType;
+    }
+
     static void CopyMethodBody(MethodInfo methodInfo, ILGenerator generator)
     {
         var body = methodInfo.GetMethodBody();

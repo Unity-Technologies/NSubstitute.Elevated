@@ -78,8 +78,17 @@ namespace NSubstitute.Elevated.RuntimeInjection
                 if (!SubstituteManager.TryMock(actualType, instance, mockedReturnType, out mockedReturnValue, methodInfo, methodGenericTypes, args))
                 {
                     var originalMethodDelegate = TryMockProxyGenerator.GetOriginalMethodDelegateFor(methodInfo);
-                    if(originalMethodDelegate != null)
+                    if (originalMethodDelegate != null)
+                    {
+                        if (instance != null)
+                        {
+                            var newArgs = new object[args.Length + 1];
+                            newArgs[0] = instance;
+                            Array.Copy(args, 0, newArgs, 1, args.Length);
+                            args = newArgs;
+                        }
                         mockedReturnValue = originalMethodDelegate.DynamicInvoke(args);
+                    }
                 }
                 
                 return true;
@@ -157,21 +166,27 @@ namespace NSubstitute.Elevated.RuntimeInjection
             readonly MethodInfo m_OriginalMethod;
             long m_OriginOffset;
             byte[] m_OriginalBytes;
+            bool m_Disposed;
 
             public Trampoline(MethodInfo originalMethod, long originOffset, byte[] originalBytes)
             {
                 m_OriginalMethod = originalMethod;
                 m_OriginOffset = originOffset;
                 m_OriginalBytes = originalBytes;
+                m_Disposed = false;
             }
 
             public void Dispose()
             {
+                if(m_Disposed)
+                    return;
+
                 MemoryUtilities.WriteBytes(m_OriginOffset, m_OriginalBytes);
                 
                 var tryMockProxyGenerator = ((RuntimeInjectionSupport.Context)SubstitutionContext.Current).TryMockProxyGenerator;
                 tryMockProxyGenerator.PurgeAllFor(m_OriginalMethod);
-
+                
+                m_Disposed = true;
             }
         }
 
