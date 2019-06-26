@@ -118,5 +118,17 @@ namespace NSubstitute.Elevated.Tests
             
             StaticClass.AddArguments(1, 2, 3).ShouldBe(6);
         }
+        
+        [Test]
+        [Ignore("This needs removing the need for the backing field.")]
+        public void MscorlibStaticMethodWorks()
+        {
+            using (SubstituteStatic.For<DateTime>())
+            {
+                DateTime.Now.Returns(new DateTime(1983, 6, 29));
+                
+                DateTime.Now.ShouldBe(new DateTime(1983, 6, 29));
+            }
+        }
     }
 }
